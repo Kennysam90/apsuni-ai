@@ -16,26 +16,6 @@ export default function TabsLayout() {
         }}
       />
 
-      <Tabs.Screen
-        name="explore"
-        options={{
-          title: "Explore",
-        }}
-      />
-
-      <Tabs.Screen
-        name="search"
-        options={{
-          title: "Search",
-        }}
-      />
-
-      <Tabs.Screen
-        name="menu"
-        options={{
-          title: "Menu",
-        }}
-      />
     </Tabs>
   );
 }

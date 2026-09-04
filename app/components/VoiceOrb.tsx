@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, forwardRef, useImperativeHandle } from 'react';
 import { View, StyleSheet } from 'react-native';
 import { WebView } from 'react-native-webview';
 
@@ -68,6 +68,12 @@ const ORB_HTML = `
   let isTalking = false;
   let time = 0;
 
+  // Real-time output volume (0-1), pushed in from React Native via
+  // window.setAudioLevel(). This is what makes the orb react to the
+  // actual loudness of what the AI is saying, instead of a generic
+  // synthetic wave.
+  let targetAudioLevel = 0;
+
   // Default orb colors
   let colorCenter = '#93C5FD';
   let colorMid = '#3B82F6';
@@ -119,6 +125,16 @@ const ORB_HTML = `
     isTalking = !!value;
   };
 
+  // React Native pushes the AI's real, live output volume here — a
+  // number between 0 (silent) and 1 (loudest). Called every animation
+  // frame while the agent is speaking.
+  window.setAudioLevel = function(value) {
+    if (typeof value !== 'number' || isNaN(value)) {
+      return;
+    }
+    targetAudioLevel = Math.max(0, Math.min(1, value));
+  };
+
   // React Native controls orb colors
   window.setColors = function(colors) {
 
@@ -155,16 +171,23 @@ const ORB_HTML = `
       height
     );
 
-    // Talking animation
+    // Talking animation — now driven by the AI's real output volume,
+    // with a light organic wobble layered on top so it doesn't look
+    // perfectly mechanical.
     if (isTalking) {
 
-      const targetLevel =
-        0.3 +
-        Math.sin(time * 8) * 0.25 +
-        Math.cos(time * 15) * 0.15;
+      const wobble =
+        Math.sin(time * 8) * 0.08 +
+        Math.cos(time * 15) * 0.05;
 
+      const targetLevel =
+        Math.max(0.08, targetAudioLevel) +
+        wobble;
+
+      // Faster response (0.35 vs the old 0.1) so the orb visibly
+      // tracks real speech bursts instead of lagging behind them.
       audioLevel +=
-        (targetLevel - audioLevel) * 0.1;
+        (targetLevel - audioLevel) * 0.35;
 
     } else {
 
@@ -485,17 +508,48 @@ interface VoiceOrbProps {
   colors?: OrbColors;
 }
 
-export default function VoiceOrb({
-  isTalking = false,
-  size = 240,
-  colors,
-}: VoiceOrbProps) {
+// Exposes an imperative handle so the parent screen can push real-time
+// audio level updates every animation frame WITHOUT going through React
+// state/props — that would re-render the whole screen 60x/second. This
+// stays a plain direct call into the WebView instead.
+export interface VoiceOrbHandle {
+  setAudioLevel: (level: number) => void;
+}
+
+const VoiceOrb = forwardRef<VoiceOrbHandle, VoiceOrbProps>(function VoiceOrb(
+  {
+    isTalking = false,
+    size = 240,
+    colors,
+  },
+  ref
+) {
 
   const webViewRef =
     useRef<WebView>(null);
 
   const isReady =
     useRef(false);
+
+  useImperativeHandle(ref, () => ({
+    setAudioLevel: (level: number) => {
+      if (
+        !isReady.current ||
+        !webViewRef.current
+      ) {
+        return;
+      }
+
+      webViewRef.current.injectJavaScript(
+        `
+        window.setAudioLevel &&
+        window.setAudioLevel(${level});
+
+        true;
+        `
+      );
+    },
+  }));
 
   // ==========================================
   // TALKING STATE
@@ -659,7 +713,9 @@ export default function VoiceOrb({
 
     </View>
   );
-}
+});
+
+export default VoiceOrb;
 
 const styles = StyleSheet.create({
 

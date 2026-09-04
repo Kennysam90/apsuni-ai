@@ -11,10 +11,13 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
-import { Ionicons, FontAwesome5, Octicons } from '@expo/vector-icons';
+import { Ionicons, FontAwesome5, Octicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import BackButton from '../../components/BackButton';
+import AnimatedAuroraBackground from '../../components/AnimatedAuroraBackground';
+import { login } from '../../services/api';
+import LoadingButton from '../../components/LoadingButton';
+import { useAppAlert } from '../../components/AppAlert';
 
 export default function SignInScreen() {
   const router = useRouter();
@@ -22,9 +25,32 @@ export default function SignInScreen() {
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(true);
+  const [error, setError] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const { showAlert } = useAppAlert();
+
+  const handleSignIn = async () => {
+    if (!email.trim() || !password) {
+      setError('Enter your email and password.');
+      return;
+    }
+    setError('');
+    setIsSubmitting(true);
+    try {
+      await login(email.trim(), password);
+      router.replace('/(tabs)');
+    } catch (requestError) {
+      const message = requestError instanceof Error ? requestError.message : 'Unable to sign in.';
+      setError(message);
+      showAlert({ title: 'Sign in failed', message });
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
   return (
-    <LinearGradient colors={['#070E26', '#040711', '#0B1A42']} style={styles.background}>
+    <View style={styles.background}>
+      <AnimatedAuroraBackground />
       <SafeAreaView style={{ flex: 1 }}>
         <StatusBar barStyle="light-content" />
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
@@ -37,13 +63,13 @@ export default function SignInScreen() {
 
             {/* Logo */}
             <View style={styles.logoRow}>
-              <Ionicons name="airplane" size={22} color="#FFFFFF" style={{ transform: [{ rotate: '45deg' }] }} />
-              <Text style={styles.logoText}>Flighti</Text>
+              <View style={styles.logoMark}><MaterialCommunityIcons name="atom" size={20} color="#93C5FD" /></View>
+              <Text style={styles.logoText}>Apsuni AI</Text>
             </View>
 
-            <Text style={styles.title}>Welcome to Flighti</Text>
+            <Text style={styles.title}>Welcome to Apsuni</Text>
             <Text style={styles.subtitle}>
-              Sign in to continue your journey with your AI travel assistant
+              Sign in to continue your journey with your AI assistant
             </Text>
 
             {/* Bordered form panel */}
@@ -112,13 +138,9 @@ export default function SignInScreen() {
                 </TouchableOpacity>
               </View>
 
-              <TouchableOpacity
-                style={styles.primaryBtn}
-                activeOpacity={0.88}
-            onPress={() => router.replace('/(tabs)')}
-              >
-                <Text style={styles.primaryBtnText}>Sign In</Text>
-              </TouchableOpacity>
+              {!!error && <Text style={styles.errorText}>{error}</Text>}
+
+              <LoadingButton label="Sign In" loading={isSubmitting} onPress={handleSignIn} style={styles.primaryBtn} />
 
               <View style={styles.bottomRow}>
                 <Text style={styles.bottomText}>Don&apos;t have an account? </Text>
@@ -130,13 +152,17 @@ export default function SignInScreen() {
           </ScrollView>
         </KeyboardAvoidingView>
       </SafeAreaView>
-    </LinearGradient>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   background: { flex: 1 },
-  scrollContent: { paddingHorizontal: 24, paddingBottom: 36 },
+  scrollContent: {
+    flexGrow: 1,
+    paddingHorizontal: 24,
+    paddingVertical: 28,
+  },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -149,6 +175,16 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 8,
     marginTop: 6,
+  },
+  logoMark: {
+    width: 34,
+    height: 34,
+    borderRadius: 12,
+    backgroundColor: 'rgba(96,165,250,0.14)',
+    borderWidth: 1,
+    borderColor: 'rgba(147,197,253,0.3)',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   logoText: {
     fontSize: 22,
@@ -227,6 +263,7 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     marginBottom: 8,
   },
+  errorText: { color: '#FCA5A5', fontSize: 12, marginBottom: 12 },
   inputWrapper: {
     flexDirection: 'row',
     alignItems: 'center',

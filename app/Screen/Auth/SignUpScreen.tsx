@@ -11,10 +11,13 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
-import { Ionicons, FontAwesome5, Octicons } from '@expo/vector-icons';
+import { Ionicons, FontAwesome5, Octicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import BackButton from '../../components/BackButton';
+import AnimatedAuroraBackground from '../../components/AnimatedAuroraBackground';
+import LoadingButton from '../../components/LoadingButton';
+import { useAppAlert } from '../../components/AppAlert';
+import { sendSignupOtp } from '../../services/api';
 
 export default function SignUpScreen() {
   const router = useRouter();
@@ -23,9 +26,32 @@ export default function SignUpScreen() {
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [agree, setAgree] = useState(true);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const { showAlert } = useAppAlert();
+
+  const handleSignUp = async () => {
+    if (!fullName.trim() || !email.trim() || !password) {
+      showAlert('Complete your name, email, and password first.');
+      return;
+    }
+    if (!agree) {
+      showAlert('Please accept the Privacy Policy and User Agreement.');
+      return;
+    }
+    setIsSubmitting(true);
+    try {
+      await sendSignupOtp(email.trim());
+      router.push({ pathname: '/Screen/Auth/OtpVerificationScreen', params: { email: email.trim(), fullName: fullName.trim(), password } });
+    } catch (requestError) {
+      showAlert({ title: 'Sign up failed', message: requestError instanceof Error ? requestError.message : 'Unable to send the verification code.' });
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
   return (
-    <LinearGradient colors={['#070E26', '#040711', '#0B1A42']} style={styles.background}>
+    <View style={styles.background}>
+      <AnimatedAuroraBackground />
       <SafeAreaView style={{ flex: 1 }}>
         <StatusBar barStyle="light-content" />
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
@@ -38,13 +64,13 @@ export default function SignUpScreen() {
 
             {/* Logo */}
             <View style={styles.logoRow}>
-              <Ionicons name="airplane" size={22} color="#FFFFFF" style={{ transform: [{ rotate: '45deg' }] }} />
-              <Text style={styles.logoText}>Flighti</Text>
+              <View style={styles.logoMark}><MaterialCommunityIcons name="atom" size={20} color="#93C5FD" /></View>
+              <Text style={styles.logoText}>Apsuni AI</Text>
             </View>
 
             <Text style={styles.title}>Create Account</Text>
             <Text style={styles.subtitle}>
-              Join the future of travel with AI-driven bookings.
+              Join the future with AI-driven.
             </Text>
 
             {/* Bordered form panel */}
@@ -124,13 +150,7 @@ export default function SignUpScreen() {
                 </Text>
               </TouchableOpacity>
 
-              <TouchableOpacity
-                style={styles.primaryBtn}
-                activeOpacity={0.88}
-                onPress={() => router.push('/Screen/Auth/OtpVerificationScreen')}
-              >
-                <Text style={styles.primaryBtnText}>Sign Up</Text>
-              </TouchableOpacity>
+              <LoadingButton label="Sign Up" loading={isSubmitting} onPress={handleSignUp} style={styles.primaryBtn} />
 
               <View style={styles.bottomRow}>
                 <Text style={styles.bottomText}>Already have an account? </Text>
@@ -142,7 +162,7 @@ export default function SignUpScreen() {
           </ScrollView>
         </KeyboardAvoidingView>
       </SafeAreaView>
-    </LinearGradient>
+    </View>
   );
 }
 
@@ -161,6 +181,16 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 8,
     marginTop: 6,
+  },
+  logoMark: {
+    width: 34,
+    height: 34,
+    borderRadius: 12,
+    backgroundColor: 'rgba(96,165,250,0.14)',
+    borderWidth: 1,
+    borderColor: 'rgba(147,197,253,0.3)',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   logoText: {
     fontSize: 22,

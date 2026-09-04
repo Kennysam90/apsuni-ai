@@ -3,6 +3,7 @@ import {
   StyleSheet,
   View,
   Text,
+  Pressable,
   TouchableOpacity,
   TextInput,
   ScrollView,
@@ -11,15 +12,26 @@ import {
   Image,
   Animated,
   Dimensions,
+  Platform, PermissionsAndroid, ActivityIndicator, Switch
+  , Modal, FlatList
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Feather, Ionicons } from '@expo/vector-icons';
+import { Feather, Ionicons, FontAwesome5, } from '@expo/vector-icons';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { ConversationProvider, useConversation } from '@elevenlabs/react-native';
 
 import BackButton from '../../components/BackButton';
 import AppBackground from '../../components/AppBackground';
-import { CenterButton } from '../../components/CustomTabBar';
-import VoiceOrb from '../../components/VoiceOrb';
+import CustomTabBar, { CenterButton } from '../../components/CustomTabBar';
+import VoiceOrb, { VoiceOrbHandle } from '../../components/VoiceOrb';
+import {
+  fetchConversationToken, getAuthUserId, sendAssistantMessageRealtime, closeRestAISocket, searchDesigns, createEditory,
+  updateEditory, addEditoryToCart, viewCart, listWallets, checkoutWithWallet,
+  getBusinessChecklist, getConversationHistory,
+  type DesignResult,
+} from '../../services/api';
+import { useAppAlert } from '../../components/AppAlert';
+import DesignGalleryPopup from '@/app/components/DesignGalleryPopup';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -34,18 +46,13 @@ const ORB_COLORS = {
 // ---------------------------------------------------------------------------
 // CONFIG — update these for your setup
 // ---------------------------------------------------------------------------
-const AGENT_ID = 'YOUR_AGENT_ID';
-
-// Your Django backend endpoint that exchanges your ElevenLabs API key for a
-// short-lived conversation token — see voiceagent_views.py's
-// get_conversation_token. The SDK calls this itself.
-const TOKEN_FETCH_URL = 'https://api.apsuni.com/api/voice-agent/token/';
-
 // If nobody has spoken and the agent hasn't replied for this long, we end
 // the session ourselves. Safety net on top of whatever silence timeout you
 // set on the agent in the ElevenLabs dashboard — stops you being billed
 // for a connection nobody is using.
-const IDLE_TIMEOUT_MS = 45 * 1000;
+// Tightened while actively testing so leaked sessions get caught fast —
+// raise back to 45s+ once things are stable.
+const DEFAULT_CHAT_GREETING = 'Good day. I’m Apsuni AI. Tell me about the business, brand, website, or mobile app you want to build.';
 
 interface VoiceAssessmentScreenProps {
   onBack?: () => void;
@@ -104,17 +111,23 @@ interface ChatMessage {
   text: string;
 }
 
+type FlowCategory = 'Mobile App' | 'Website';
+type ChecklistStep = { label?: string; title?: string; done?: boolean; completed?: boolean; [key: string]: any };
+type AssistantMode = 'Thinking' | 'Expert' | 'Vision';
+
+const ASSISTANT_MODES: { label: AssistantMode; icon: string; description: string }[] = [
+  { label: 'Thinking', icon: 'cpu', description: 'Careful reasoning and balanced answers' },
+  { label: 'Expert', icon: 'award', description: 'Detailed, professional guidance' },
+  { label: 'Vision', icon: 'eye', description: 'Focus on images and visual ideas' },
+];
+
 // ---------------------------------------------------------------------------
 // Default export — just wires up the ConversationProvider and renders the
 // actual screen inside it, since useConversation must be called from a
 // component that sits underneath the provider.
 // ---------------------------------------------------------------------------
 export default function VoiceAssessmentScreen(props: VoiceAssessmentScreenProps) {
-  return (
-    <ConversationProvider tokenFetchUrl={TOKEN_FETCH_URL}>
-      <VoiceAssessmentScreenInner {...props} />
-    </ConversationProvider>
-  );
+  return <ConversationProvider><VoiceAssessmentScreenInner {...props} /></ConversationProvider>;
 }
 
 function VoiceAssessmentScreenInner({
@@ -124,11 +137,206 @@ function VoiceAssessmentScreenInner({
 }: VoiceAssessmentScreenProps) {
   const [isExpanded, setIsExpanded] = useState(false);
   const [promptText, setPromptText] = useState('');
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [messages, setMessages] = useState<ChatMessage[]>(() => [{
+    id: 'default-chat-greeting',
+    role: 'assistant',
+    text: DEFAULT_CHAT_GREETING,
+  }]);
+  const router = useRouter();
+  const params = useLocalSearchParams<{ conversationId?: string }>();
+  const initialConversationId = typeof params.conversationId === 'string' ? params.conversationId : undefined;
   const [isInputFocused, setIsInputFocused] = useState(false);
   const [isWaitingForReply, setIsWaitingForReply] = useState(false);
+  const [conversationId, setConversationId] = useState<string | undefined>(initialConversationId);
+  const [isStartingVoice, setIsStartingVoice] = useState(false);
+  const [designModalVisible, setDesignModalVisible] = useState(false);
+  const [designCategory, setDesignCategory] = useState<FlowCategory>('Mobile App');
+  const [designQuery, setDesignQuery] = useState('');
+  const [designPage, setDesignPage] = useState(1);
+  const [designPages, setDesignPages] = useState(1);
+  const [designs, setDesigns] = useState<DesignResult[]>([]);
+  const [designLoading, setDesignLoading] = useState(false);
+  const [companyName, setCompanyName] = useState('');
+  const [logoUrl, setLogoUrl] = useState('');
+  const [checklistVisible, setChecklistVisible] = useState(false);
+  const [checklist, setChecklist] = useState<ChecklistStep[]>([]);
+  const [cartVisible, setCartVisible] = useState(false);
+  const [settingsVisible, setSettingsVisible] = useState(false);
+  const [activeMode, setActiveMode] = useState<AssistantMode | null>(null);
+  const [cart, setCart] = useState<Record<string, any> | null>(null);
+  const [address, setAddress] = useState('');
+  const [mobile, setMobile] = useState('');
+  const [flowProgress, setFlowProgress] = useState<string[]>([]);
+  const { showAlert } = useAppAlert();
+  const [isGalleryVisible, setIsGalleryVisible] = useState(false);
+
+  useEffect(() => {
+    if (!initialConversationId) return;
+    getConversationHistory(initialConversationId).then((conversation) => {
+      if (!conversation || Array.isArray(conversation)) return;
+      setMessages((conversation.messages || []).map((message) => ({
+        id: message.id,
+        role: message.role,
+        text: message.text,
+      })));
+    }).catch((error) => showAlert(error instanceof Error ? error.message : 'Could not load this conversation.'));
+  }, [initialConversationId, showAlert]);
+
+  const markProgress = (step: string) => setFlowProgress((current) => current.includes(step) ? current : [...current, step]);
+
+  const selectAssistantMode = (mode: AssistantMode | null) => {
+    setActiveMode(mode);
+    setSettingsVisible(false);
+  };
+
+  const openDesignSearch = async (category: FlowCategory, query = designQuery) => {
+    setDesignCategory(category);
+    setDesignQuery(query);
+    setDesignPage(1);
+    setDesignModalVisible(true);
+    setDesignLoading(true);
+    try {
+      const result = await searchDesigns(query, category, 1);
+      setDesigns(result.products || []);
+      setDesignPages(result.pages || 1);
+    } catch (error) {
+      showAlert(error instanceof Error ? error.message : 'Could not load designs.');
+    } finally {
+      setDesignLoading(false);
+    }
+  };
+
+  const designCategoryFromPrompt = (prompt: string): FlowCategory | null => {
+    if (/\b(website|web site|web)\b/i.test(prompt)) return 'Website';
+    if (/\b(mobile app|mobile application|mobile|app)\b/i.test(prompt)) return 'Mobile App';
+    return null;
+  };
+
+  const openDesignPickerForBuildRequest = (prompt: string, intent?: string) => {
+    if (intent && intent !== 'build') return;
+    const category = designCategoryFromPrompt(prompt);
+    if (category) {
+      // The picker loads designs through the backend search API.
+      openDesignSearch(category, prompt);
+    }
+  };
+
+  const loadDesignPage = async (page: number) => {
+    setDesignLoading(true);
+    try {
+      const result = await searchDesigns(designQuery, designCategory, page);
+      setDesigns(result.products || []);
+      setDesignPage(result.page || page);
+    } catch (error) {
+      showAlert(error instanceof Error ? error.message : 'Could not load designs.');
+    } finally {
+      setDesignLoading(false);
+    }
+  };
+
+  const chooseDesign = async (design: DesignResult) => {
+    const productId = design.id ?? design.pid;
+    if (!productId) {
+      showAlert('This design is missing its product id.');
+      return;
+    }
+    setDesignLoading(true);
+    try {
+      const created = await createEditory({
+        product: productId,
+        title: design.title || 'New project',
+        company: companyName.trim() || 'Apsuni',
+        company_logo: logoUrl.trim() || 'logo.png',
+        type: designCategory,
+        image: design.image || 'product.jpg',
+      });
+      const editory = created.data;
+      if (companyName.trim() || logoUrl.trim()) {
+        await updateEditory(editory.id, {
+          ...(companyName.trim() ? { company: companyName.trim() } : {}),
+          ...(logoUrl.trim() ? { company_logo: logoUrl.trim() } : {}),
+        });
+      }
+      await addEditoryToCart(editory.id);
+      const currentCart = await viewCart();
+      setCart(currentCart.data);
+      setCartVisible(true);
+      setDesignModalVisible(false);
+      markProgress('Design selected');
+      markProgress('Project created');
+      markProgress('Added to cart');
+    } catch (error) {
+      showAlert(error instanceof Error ? error.message : 'Could not create this project.');
+    } finally {
+      setDesignLoading(false);
+    }
+  };
+
+  const openChecklist = async (idea: string) => {
+    setIsWaitingForReply(true);
+    try {
+      const result = await getBusinessChecklist(idea);
+      setChecklist((result.checklist || []) as ChecklistStep[]);
+      setChecklistVisible(true);
+    } catch (error) {
+      showAlert(error instanceof Error ? error.message : 'Could not create the checklist.');
+    } finally {
+      setIsWaitingForReply(false);
+    }
+  };
+
+  const payFromWallet = async () => {
+    if (!address.trim() || !mobile.trim()) {
+      showAlert('Enter a delivery address and mobile number first.');
+      return;
+    }
+    try {
+      const wallets = await listWallets();
+      const balance = wallets.reduce((sum, wallet) => sum + Number(wallet.balance || 0), 0);
+      const total = Number(cart?.total_price || cart?.total || cart?.cart_total || 0);
+      if (total > 0 && balance < total) {
+        showAlert(`Insufficient wallet balance. Available: ${balance.toFixed(2)}.`);
+        return;
+      }
+      const result = await checkoutWithWallet({ address: address.trim(), mobile: mobile.trim(), status: true });
+      markProgress('Checkout complete');
+      setCartVisible(false);
+      showAlert(result.message || 'Payment completed successfully.');
+    } catch (error) {
+      showAlert(error instanceof Error ? error.message : 'Checkout could not be completed.');
+    }
+  };
 
   const animation = useRef(new Animated.Value(0)).current;
+
+  // Ref into the orb so real-time audio level updates can be pushed
+  // directly to it every animation frame, bypassing React state/props
+  // (which would re-render the whole screen dozens of times a second).
+  const orbRef = useRef<VoiceOrbHandle>(null);
+
+  // Prevents a second session from being started while one is already
+  // starting/connected — this is what stops sessions from stacking up
+  // (and quietly burning credits) across Fast Refresh reloads or repeated
+  // mic-button taps.
+  const hasStartedRef = useRef(false);
+
+  // Requests Android's RECORD_AUDIO runtime permission. iOS prompts
+  // automatically on first capture using the NSMicrophoneUsageDescription
+  // string already set in app.json, so nothing extra is needed there.
+  const requestMicPermission = async () => {
+    if (Platform.OS !== 'android') {
+      return true;
+    }
+    const granted = await PermissionsAndroid.request(
+      PermissionsAndroid.PERMISSIONS.RECORD_AUDIO,
+      {
+        title: 'Microphone Permission',
+        message: 'This app needs access to your microphone to listen and respond to you.',
+        buttonPositive: 'Allow',
+      }
+    );
+    return granted === PermissionsAndroid.RESULTS.GRANTED;
+  };
 
   /*
    * ---------------------------------------------------------
@@ -156,71 +364,156 @@ function VoiceAssessmentScreenInner({
     }
   }, []);
 
-  const resetIdleTimer = useCallback(() => {
+  const pauseVoiceSession = useCallback(() => {
     clearIdleTimer();
-    idleTimer.current = setTimeout(() => {
-      // No activity for a while — close the session so the per-minute
-      // billing clock stops running.
+    if (hasStartedRef.current || isConnected) {
       conversation.endSession();
-    }, IDLE_TIMEOUT_MS);
-  }, [clearIdleTimer, conversation]);
+      hasStartedRef.current = false;
+      setIsStartingVoice(false);
+    }
+  }, [clearIdleTimer, conversation, isConnected]);
+
+  const resetIdleTimer = useCallback(() => {
+    // Keep the voice session open until the user explicitly pauses it or
+    // leaves the screen. This avoids disconnecting while ElevenLabs is still
+    // processing a quiet pause in the conversation.
+    clearIdleTimer();
+  }, [clearIdleTimer]);
+
+  // ---------------------------------------------------------
+  // AUDIO-REACTIVE ORB
+  // ---------------------------------------------------------
+  // Every animation frame while the agent is speaking, read its real,
+  // live output volume and push it straight into the orb via the ref
+  // above. This is what makes the orb actually react to what the AI is
+  // saying, instead of playing a generic canned animation.
+  useEffect(() => {
+    let rafId: number;
+
+    const tick = () => {
+      if (isSpeaking) {
+        // getOutputVolume() returns the agent's current output volume,
+        // 0 (silent) to 1 (loudest) — verify this against the current
+        // @elevenlabs/react-native API reference if it doesn't resolve.
+        const volume = conversation.getOutputVolume?.() ?? 0;
+        orbRef.current?.setAudioLevel(volume);
+      } else {
+        orbRef.current?.setAudioLevel(0);
+      }
+      rafId = requestAnimationFrame(tick);
+    };
+
+    rafId = requestAnimationFrame(tick);
+
+    return () => {
+      cancelAnimationFrame(rafId);
+    };
+  }, [isSpeaking, conversation]);
 
   const startListening = useCallback(async () => {
+    if (hasStartedRef.current) {
+      // Already starting or connected — never open a second session on
+      // top of it. This is the fix for sessions stacking up.
+      return;
+    }
+    hasStartedRef.current = true;
+    setIsStartingVoice(true);
+
+    const hasPermission = await requestMicPermission();
+    if (!hasPermission) {
+      console.log('Microphone permission denied');
+      hasStartedRef.current = false;
+      setIsStartingVoice(false);
+      return;
+    }
     try {
+      const credential = await fetchConversationToken();
+      const authUserId = getAuthUserId();
+      if (!authUserId) {
+        throw new Error('Your account identity is missing. Please sign in again before using voice AI.');
+      }
       await conversation.startSession({
-        agentId: AGENT_ID,
+        ...(typeof credential === 'string' ? { conversationToken: credential } : { agentId: credential.agent_id }),
+        userId: `apsuni-${authUserId}`,
+        dynamicVariables: { apsuni_user_id: String(authUserId) },
+        // Dynamic variables personalize the agent, while this explicit body
+        // is forwarded by ElevenLabs to the Custom LLM request. Django uses
+        // it to select and debit the authenticated Apsuni wallet.
+        customLlmExtraBody: {
+          apsuni_user_id: String(authUserId),
+          user_id: `apsuni-${authUserId}`,
+        },
         onConnect: () => {
           resetIdleTimer();
         },
         onDisconnect: () => {
           clearIdleTimer();
+          // Allow starting again after a real disconnect.
+          hasStartedRef.current = false;
+          setIsStartingVoice(false);
         },
         // Agent's spoken reply, as text.
         onMessage: (message: any) => {
           resetIdleTimer();
           setIsWaitingForReply(false);
-          if (message?.message) {
+          const text = message?.message ?? message?.text;
+          if (text) {
+            const source = message?.source ?? message?.role;
+            const role = source === 'user' || source === 'human' ? 'user' : 'assistant';
             setMessages((current) => [
               ...current,
               {
-                id: Date.now().toString() + '-assistant',
-                role: 'assistant',
-                text: message.message,
+                id: Date.now().toString() + `-${role}`,
+                role,
+                text,
               },
             ]);
+            if (role === 'user' && designCategoryFromPrompt(text)) {
+              // Voice transcripts that request a website/app also go through
+              // the backend before the design picker is opened.
+              sendAssistantMessageRealtime(text, conversationId)
+                .then((result) => {
+                  setConversationId(result.conversation_id);
+                  openDesignPickerForBuildRequest(text, result.response?.intent);
+                })
+                .catch((error) => console.log('Build flow request failed:', error));
+            }
           }
         },
-        // Live transcript of what the user said out loud.
-        onUserTranscript: (transcript: any) => {
-          resetIdleTimer();
-          if (transcript?.message) {
-            setMessages((current) => [
-              ...current,
-              {
-                id: Date.now().toString() + '-user',
-                role: 'user',
-                text: transcript.message,
-              },
-            ]);
-          }
-        },
-        onError: (message: string) => {
-          console.log('Voice agent error:', message);
-          setIsWaitingForReply(false);
-        },
+      onModeChange: (mode: any) => {
+        console.log('Voice mode:', mode);
+      },
+      onStatusChange: (statusEvent: any) => {
+        console.log('Voice status:', statusEvent);
+      },
+      onVadScore: (vadEvent: any) => {
+        console.log('Voice activity:', vadEvent);
+      },
+      onError: (message: any) => {
+        const errorText = message?.message ?? message?.error ?? String(message);
+        console.log('Voice agent error:', errorText);
+        setIsWaitingForReply(false);
+        showAlert(`Voice agent error: ${errorText}`);
+      },
       });
     } catch (err) {
       console.log('Failed to start voice session:', err);
+      hasStartedRef.current = false;
+      setIsStartingVoice(false);
+      showAlert(err instanceof Error ? err.message : 'Could not start the voice session. Please try again.');
     }
-  }, [conversation, resetIdleTimer, clearIdleTimer]);
+  }, [conversation, resetIdleTimer, clearIdleTimer, showAlert]);
 
-  // Auto-start listening the moment the screen mounts — no record button.
+  // Chat is the default mode. ElevenLabs starts only when the user presses
+  // the voice button, which avoids opening a billable session on screen load.
   useEffect(() => {
-    startListening();
     return () => {
       clearIdleTimer();
       conversation.endSession();
+      closeRestAISocket();
+      hasStartedRef.current = false;
     };
+    // The cleanup intentionally runs once when this screen unmounts.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -235,8 +528,7 @@ function VoiceAssessmentScreenInner({
 
   const handleMicPress = () => {
     if (isConnected) {
-      clearIdleTimer();
-      conversation.endSession();
+      pauseVoiceSession();
     } else {
       startListening();
     }
@@ -254,6 +546,9 @@ function VoiceAssessmentScreenInner({
       return;
     }
 
+    // Typed chat uses only /assistant/message/ -> backend -> Claude. Never
+    // send typed chat into the ElevenLabs session, and pause voice first.
+    pauseVoiceSession();
     onSendPrompt?.(prompt);
 
     setMessages((currentMessages) => [
@@ -265,19 +560,32 @@ function VoiceAssessmentScreenInner({
       },
     ]);
 
-    // If the session isn't connected (paused), resume it first.
-    if (!isConnected) {
-      await startListening();
-    }
-
     setIsWaitingForReply(true);
-    resetIdleTimer();
-
-    // Sends the typed text into the conversation as if it were spoken —
-    // the agent's reply arrives via the onMessage callback above.
-    // Verify this method name against the current @elevenlabs/react-native
-    // API reference if it doesn't resolve.
-    conversation.sendUserMessage?.(prompt);
+    try {
+      const socketResult = await sendAssistantMessageRealtime(prompt, conversationId);
+      const result = socketResult.response;
+      if (!result || !socketResult.conversation_id) throw new Error('The assistant returned an incomplete response.');
+      setConversationId(socketResult.conversation_id);
+      setMessages((current) => [...current, {
+        id: Date.now().toString() + '-assistant-api',
+        role: 'assistant',
+        text: result.reply_text,
+      }]);
+      openDesignPickerForBuildRequest(prompt, result.intent);
+      if (result.intent === 'business' && /\b(idea|business|launch|start|grow|company)\b/i.test(prompt)) {
+        openChecklist(prompt);
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'I could not reach the assistant right now.';
+      showAlert(message);
+      setMessages((current) => [...current, {
+        id: Date.now().toString() + '-assistant-error',
+        role: 'assistant',
+        text: error instanceof Error ? error.message : 'I could not reach the assistant right now.',
+      }]);
+    } finally {
+      setIsWaitingForReply(false);
+    }
   };
 
   const handlePromptAction = () => {
@@ -300,6 +608,10 @@ function VoiceAssessmentScreenInner({
 
   const toggleSheet = () => {
     const toValue = isExpanded ? 0 : 1;
+
+    if (!isExpanded) {
+      pauseVoiceSession();
+    }
 
     Animated.spring(animation, {
       toValue,
@@ -339,10 +651,23 @@ function VoiceAssessmentScreenInner({
           <BackButton onBack={onBack} />
 
           <Text style={styles.headerTitle}>
-            Voice Assessment
+            Agent
           </Text>
 
-          <View style={styles.headerSpacer} />
+          <TouchableOpacity
+            activeOpacity={0.85}
+            onPress={() => router.push('/Screen/Premium-Screen/PremiumScreen')}
+          >
+            <LinearGradient
+              colors={['#2563EB', '#3B82F6', '#60A5FA']}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 0 }}
+              style={styles.proPill}
+            >
+              <FontAwesome5 name="crown" size={12} color="#FBBF24" style={{ marginRight: 6 }} />
+              <Text style={styles.proText}>Pro</Text>
+            </LinearGradient>
+          </TouchableOpacity>
         </View>
 
         {/* MAIN CONTENT */}
@@ -356,28 +681,62 @@ function VoiceAssessmentScreenInner({
             <View style={styles.orbGlowHalo} />
 
             <VoiceOrb
+              ref={orbRef}
               isTalking={isSpeaking}
-              size={440}
+              size={540}
               colors={ORB_COLORS}
             />
           </View>
+
+          <Image
+            source={require('@/assets/images/tabs-icon/Sound voice waves.gif')}
+            style={styles.voiceWaves}
+          />
         </View>
+
+         <Pressable
+                  style={[styles.tabItem]}
+                  onPress={() => setIsGalleryVisible(true)}
+                >
+                  <Image
+                    source={require('@/assets/images/tabs-icon/search.png')}
+                    style={styles.searchIcon}
+                    resizeMode="contain"
+                  />
+                </Pressable>
 
         {/* BOTTOM CONTROL */}
         <View style={styles.bottomBar}>
           <View style={styles.micOuterHalo}>
 
             {/* DOWN BUTTON */}
-            <TouchableOpacity
-              activeOpacity={0.7}
-              style={styles.sideIconButton}
-            >
-              <Feather
-                name="chevron-down"
-                size={24}
-                color="#CBD5E1"
-              />
-            </TouchableOpacity>
+            <View style={styles.modeControl}>
+              {activeMode && <Text style={styles.modeLabel}>{activeMode}</Text>}
+              <TouchableOpacity
+                activeOpacity={0.7}
+                onPress={() => setSettingsVisible(true)}
+                style={styles.sideIconButton}
+              >
+                <LinearGradient
+                  colors={['#3B82F6', '#2563EB', '#1D4ED8']}
+                  style={styles.micGradient}
+                >
+                  {activeMode ? (
+                    <Feather
+                      name={ASSISTANT_MODES.find((mode) => mode.label === activeMode)?.icon as any}
+                      size={24}
+                      color="#FFFFFF"
+                    />
+                  ) : (
+                    <Image
+                      source={require('@/assets/images/tabs-icon/settings (1).png')}
+                      style={{ width: 24, height: 24 }}
+                      resizeMode="contain"
+                    />
+                  )}
+                </LinearGradient>
+              </TouchableOpacity>
+            </View>
 
             {/* SHEET BUTTON */}
             <TouchableOpacity
@@ -385,6 +744,14 @@ function VoiceAssessmentScreenInner({
               onPress={toggleSheet}
               style={styles.sideIconButton}
             >
+              <LinearGradient
+                colors={[
+                  '#3B82F6',
+                  '#2563EB',
+                  '#1D4ED8',
+                ]}
+                style={styles.micGradient}
+              >
               <Animated.View
                 style={{
                   transform: [
@@ -392,26 +759,26 @@ function VoiceAssessmentScreenInner({
                       rotate: arrowRotate,
                     },
                   ],
-                  backgroundColor: '#2B352F',
                   width: 50,
                   height: 50,
                   justifyContent: 'center',
                   alignItems: 'center',
-                  borderRadius: 25,
                 }}
               >
                 <Image
-                  source={require('@/assets/images/tabs-icon/arrow (1).png')}
+                  source={require('@/assets/images/tabs-icon/chat.png')}
                   style={styles.arrowIcon}
                   resizeMode="contain"
                 />
               </Animated.View>
+              </LinearGradient>
             </TouchableOpacity>
 
             {/* MICROPHONE — pause / resume the live session */}
             <TouchableOpacity
               activeOpacity={0.85}
               onPress={handleMicPress}
+              disabled={isStartingVoice}
               style={styles.micButtonWrapper}
             >
               <LinearGradient
@@ -422,7 +789,9 @@ function VoiceAssessmentScreenInner({
                 ]}
                 style={styles.micGradient}
               >
-                {!isConnected ? (
+                {isStartingVoice ? (
+                  <ActivityIndicator color="#FFFFFF" />
+                ) : !isConnected ? (
                   <Image
                     source={require('@/assets/images/tabs-icon/mute.png')}
                     style={styles.muteIcon}
@@ -441,6 +810,9 @@ function VoiceAssessmentScreenInner({
           </View>
         </View>
       </SafeAreaView>
+
+      {/* Keep the app navigation available during voice sessions. */}
+      <CustomTabBar />
 
       {/* =====================================================
           ANIMATED CARD
@@ -476,6 +848,30 @@ function VoiceAssessmentScreenInner({
           contentContainerStyle={styles.sheetScrollContent}
           showsVerticalScrollIndicator={false}
         >
+          <View style={styles.quickActions}>
+            <TouchableOpacity style={styles.quickAction} onPress={() => openDesignSearch('Mobile App')}>
+              <Feather name="smartphone" size={15} color="#2563EB" />
+              <Text style={styles.quickActionText}>Find app designs</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.quickAction} onPress={() => openDesignSearch('Website')}>
+              <Feather name="layout" size={15} color="#2563EB" />
+              <Text style={styles.quickActionText}>Find website designs</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.quickAction} onPress={() => openChecklist('My business idea')}>
+              <Feather name="check-square" size={15} color="#2563EB" />
+              <Text style={styles.quickActionText}>Business checklist</Text>
+            </TouchableOpacity>
+          </View>
+          {flowProgress.length > 0 && (
+            <View style={styles.progressCard}>
+              <Text style={styles.progressTitle}>Project progress</Text>
+              {['Design selected', 'Project created', 'Added to cart', 'Checkout complete'].map((step) => (
+                <Text key={step} style={styles.progressStep}>
+                  {flowProgress.includes(step) ? '✓' : '○'} {step}
+                </Text>
+              ))}
+            </View>
+          )}
           {messages.length > 0 ? (
             <View style={styles.conversationContainer}>
 
@@ -642,7 +1038,10 @@ function VoiceAssessmentScreenInner({
             <TextInput
               value={promptText}
               onChangeText={setPromptText}
-              onFocus={() => setIsInputFocused(true)}
+              onFocus={() => {
+                setIsInputFocused(true);
+                pauseVoiceSession();
+              }}
               placeholder="write your prompt"
               placeholderTextColor="#64748B"
               style={styles.promptInput}
@@ -688,6 +1087,95 @@ function VoiceAssessmentScreenInner({
 
         </View>
       </Animated.View>
+
+      <Modal visible={designModalVisible} animationType="slide" transparent onRequestClose={() => setDesignModalVisible(false)}>
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalCard}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Choose a {designCategory.toLowerCase()} design</Text>
+              <TouchableOpacity onPress={() => setDesignModalVisible(false)}><Feather name="x" size={22} color="#64748B" /></TouchableOpacity>
+            </View>
+            <TextInput value={designQuery} onChangeText={setDesignQuery} placeholder="Describe the design" placeholderTextColor="#94A3B8" style={styles.modalInput} />
+            <TextInput value={companyName} onChangeText={setCompanyName} placeholder="Company / brand name (optional)" placeholderTextColor="#94A3B8" style={styles.modalInput} />
+            <TextInput value={logoUrl} onChangeText={setLogoUrl} placeholder="Logo URL (optional)" placeholderTextColor="#94A3B8" style={styles.modalInput} autoCapitalize="none" />
+            <TouchableOpacity style={styles.searchButton} onPress={() => openDesignSearch(designCategory)} disabled={designLoading}>
+              {designLoading ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.searchButtonText}>Search designs</Text>}
+            </TouchableOpacity>
+            <FlatList
+              data={designs}
+              keyExtractor={(item, index) => String(item.id ?? item.pid ?? index)}
+              numColumns={2}
+              columnWrapperStyle={styles.designGridRow}
+              ListEmptyComponent={<Text style={styles.emptyText}>Search to see available designs.</Text>}
+              renderItem={({ item }) => (
+                <TouchableOpacity style={styles.designRow} onPress={() => chooseDesign(item)} disabled={designLoading}>
+                  {item.image ? <Image source={{ uri: item.image }} style={styles.designImage} /> : <View style={styles.designImagePlaceholder}><Feather name="image" size={20} color="#94A3B8" /></View>}
+                  <View style={styles.designInfo}><Text style={styles.designTitle}>{item.title || 'Untitled design'}</Text><Text style={styles.designMeta}>{item.price ? `$${item.price}` : 'Select this design'}</Text></View>
+                  <Feather name="chevron-right" size={18} color="#2563EB" />
+                </TouchableOpacity>
+              )}
+            />
+            <View style={styles.pagination}><TouchableOpacity disabled={designPage <= 1 || designLoading} onPress={() => loadDesignPage(designPage - 1)}><Text style={styles.pageText}>Previous</Text></TouchableOpacity><Text style={styles.pageNumber}>{designPage} / {designPages}</Text><TouchableOpacity disabled={designPage >= designPages || designLoading} onPress={() => loadDesignPage(designPage + 1)}><Text style={styles.pageText}>Next</Text></TouchableOpacity></View>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal visible={checklistVisible} animationType="slide" transparent onRequestClose={() => setChecklistVisible(false)}>
+        <View style={styles.modalBackdrop}><View style={styles.modalCard}>
+          <View style={styles.modalHeader}><Text style={styles.modalTitle}>Your business checklist</Text><TouchableOpacity onPress={() => setChecklistVisible(false)}><Feather name="x" size={22} color="#64748B" /></TouchableOpacity></View>
+          <Text style={styles.modalSubtitle}>Tap each step as you complete it.</Text>
+          {checklist.map((step, index) => <TouchableOpacity key={index} style={styles.checklistRow} onPress={() => setChecklist((items) => items.map((item, i) => i === index ? { ...item, done: !item.done } : item))}><Feather name={step.done ? 'check-square' : 'square'} size={20} color={step.done ? '#2563EB' : '#94A3B8'} /><Text style={styles.checklistText}>{step.label || step.title || step.name || `Step ${index + 1}`}</Text></TouchableOpacity>)}
+        </View></View>
+      </Modal>
+
+      <Modal visible={cartVisible} animationType="slide" transparent onRequestClose={() => setCartVisible(false)}>
+        <View style={styles.modalBackdrop}><View style={styles.modalCard}>
+          <View style={styles.modalHeader}><Text style={styles.modalTitle}>Project cart</Text><TouchableOpacity onPress={() => setCartVisible(false)}><Feather name="x" size={22} color="#64748B" /></TouchableOpacity></View>
+          <Text style={styles.modalSubtitle}>Review your project before wallet checkout.</Text>
+          <TextInput value={address} onChangeText={setAddress} placeholder="Delivery address" placeholderTextColor="#94A3B8" style={styles.modalInput} />
+          <TextInput value={mobile} onChangeText={setMobile} placeholder="Mobile number" placeholderTextColor="#94A3B8" style={styles.modalInput} keyboardType="phone-pad" />
+          <TouchableOpacity style={styles.searchButton} onPress={payFromWallet}><Text style={styles.searchButtonText}>Pay with wallet</Text></TouchableOpacity>
+        </View></View>
+      </Modal>
+
+      <Modal visible={settingsVisible} animationType="fade" transparent onRequestClose={() => setSettingsVisible(false)}>
+        <View style={styles.settingsBackdrop}>
+          <View style={styles.settingsCard}>
+            <Text style={styles.settingsModeHint}>Choose your assistant mode</Text>
+            <View style={styles.settingsSection}>
+              {ASSISTANT_MODES.map((mode, index) => (
+                <React.Fragment key={mode.label}>
+                  <TouchableOpacity
+                    activeOpacity={0.75}
+                    style={styles.settingsRow}
+                    onPress={() => selectAssistantMode(mode.label)}
+                  >
+                    <View style={styles.settingsRowIcon}>
+                      <Feather name={mode.icon as any} size={19} color="#2563EB" />
+                    </View>
+                    <View style={styles.settingsRowCopy}>
+                      <Text style={styles.settingsRowTitle}>{mode.label}</Text>
+                      <Text style={styles.settingsRowDescription}>{mode.description}</Text>
+                    </View>
+                    <Switch
+                      value={activeMode === mode.label}
+                      onValueChange={(enabled) => selectAssistantMode(enabled ? mode.label : null)}
+                      trackColor={{ false: '#CBD5E1', true: '#93C5FD' }}
+                      thumbColor={activeMode === mode.label ? '#2563EB' : '#F8FAFC'}
+                    />
+                  </TouchableOpacity>
+                  {index < ASSISTANT_MODES.length - 1 && <View style={styles.settingsDivider} />}
+                </React.Fragment>
+              ))}
+            </View>
+
+          </View>
+        </View>
+      </Modal>
+      <DesignGalleryPopup
+              visible={isGalleryVisible}
+              onClose={() => setIsGalleryVisible(false)}
+            />
     </View>
   );
 }
@@ -715,6 +1203,8 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '600',
     color: '#FFFFFF',
+    justifyContent:"center",
+    textAlign:"center",
   },
 
   headerSpacer: {
@@ -753,6 +1243,21 @@ const styles = StyleSheet.create({
     opacity: 0.2,
   },
 
+  voiceWaves: {
+    width: 200,
+    height: 100,
+    marginTop: -20,
+    marginBottom: 16,
+  },
+
+  proPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+  },
+
   bottomBar: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -760,6 +1265,21 @@ const styles = StyleSheet.create({
     paddingHorizontal: 36,
     paddingBottom: 32,
     paddingTop: 16,
+    marginBottom: 120,
+  },
+
+  modeControl: {
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
+    minWidth: 50,
+  },
+
+  modeLabel: {
+    color: '#CBD5E1',
+    fontSize: 10,
+    fontWeight: '700',
+    marginBottom: 4,
   },
 
   micOuterHalo: {
@@ -788,29 +1308,23 @@ const styles = StyleSheet.create({
     tintColor: '#CBD5E1',
   },
 
+  proText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+
   micButtonWrapper: {
     width: 88,
     height: 88,
-    borderRadius: 44,
-    backgroundColor: '#272B2E',
-    borderWidth: 9,
-    borderColor: '#272B2E',
     alignItems: 'center',
     justifyContent: 'center',
     overflow: 'hidden',
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 6,
-    },
-    shadowOpacity: 0.35,
-    shadowRadius: 12,
-    elevation: 8,
   },
 
   micGradient: {
-    width: 62,
-    height: 62,
+    width: 50,
+    height: 50,
     borderRadius: 31,
     alignItems: 'center',
     justifyContent: 'center',
@@ -1053,4 +1567,64 @@ const styles = StyleSheet.create({
     width: 22,
     height: 22,
   },
+
+  searchIcon: {
+    width: 24,
+    height: 24,
+  },
+
+  tabItem: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  quickActions: { width: '100%', flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 12 },
+  quickAction: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#EFF6FF', borderRadius: 16, paddingHorizontal: 10, paddingVertical: 8 },
+  quickActionText: { color: '#1D4ED8', fontSize: 12, fontWeight: '600' },
+  progressCard: { width: '100%', backgroundColor: '#F8FAFC', borderRadius: 14, padding: 12, marginBottom: 16 },
+  progressTitle: { color: '#0F172A', fontSize: 14, fontWeight: '700', marginBottom: 5 },
+  progressStep: { color: '#475569', fontSize: 12, lineHeight: 20 },
+  modalBackdrop: { flex: 1, backgroundColor: 'rgba(2, 6, 23, 0.65)', justifyContent: 'flex-end' },
+  modalCard: { maxHeight: '88%', backgroundColor: '#FFFFFF', borderTopLeftRadius: 28, borderTopRightRadius: 28, padding: 20 },
+  modalHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 },
+  modalTitle: { flex: 1, color: '#0F172A', fontSize: 18, fontWeight: '800' },
+  modalSubtitle: { color: '#64748B', fontSize: 13, marginBottom: 14 },
+  modalInput: { borderWidth: 1, borderColor: '#E2E8F0', borderRadius: 12, color: '#0F172A', paddingHorizontal: 13, paddingVertical: 11, marginBottom: 9 },
+  searchButton: { backgroundColor: '#2563EB', borderRadius: 12, alignItems: 'center', justifyContent: 'center', minHeight: 44, marginBottom: 12 },
+  searchButtonText: { color: '#FFFFFF', fontSize: 14, fontWeight: '700' },
+  emptyText: { textAlign: 'center', color: '#64748B', paddingVertical: 25 },
+  settingsBackdrop: { flex: 1, backgroundColor: 'rgba(2, 6, 23, 0.35)', alignItems: 'center', justifyContent: 'center', padding: 24 },
+  settingsCard: { width: '100%', maxWidth: 320, backgroundColor: '#FFFFFF', borderRadius: 22, padding: 16, shadowColor: '#000', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.2, shadowRadius: 18, elevation: 12 },
+  settingsHandle: { alignSelf: 'center', width: 42, height: 4, borderRadius: 4, backgroundColor: '#CBD5E1', marginBottom: 18 },
+  settingsTitleRow: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 12 },
+  settingsTitleIcon: { width: 44, height: 44, borderRadius: 14, backgroundColor: '#EFF6FF', alignItems: 'center', justifyContent: 'center' },
+  settingsImage: { width: 25, height: 25 },
+  settingsTitle: { color: '#0F172A', fontSize: 20, fontWeight: '800' },
+  settingsModeHint: { color: '#64748B', fontSize: 12, marginBottom: 8 },
+  settingsSubtitle: { color: '#64748B', fontSize: 12, marginTop: 3 },
+  settingsCloseButton: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#F1F5F9', alignItems: 'center', justifyContent: 'center' },
+  settingsSectionLabel: { color: '#94A3B8', fontSize: 11, fontWeight: '800', letterSpacing: 1, marginTop: 10, marginBottom: 8 },
+  settingsSection: { backgroundColor: '#F8FAFC', borderRadius: 16, paddingHorizontal: 14 },
+  settingsRow: { minHeight: 72, flexDirection: 'row', alignItems: 'center' },
+  settingsRowIcon: { width: 36, height: 36, borderRadius: 11, backgroundColor: '#DBEAFE', alignItems: 'center', justifyContent: 'center', marginRight: 11 },
+  settingsRowCopy: { flex: 1, paddingRight: 8 },
+  settingsRowTitle: { color: '#1E293B', fontSize: 14, fontWeight: '700' },
+  settingsRowDescription: { color: '#64748B', fontSize: 11, lineHeight: 16, marginTop: 3 },
+  settingsDivider: { height: 1, backgroundColor: '#E2E8F0' },
+  settingsInfoRow: { minHeight: 43, flexDirection: 'row', alignItems: 'center', gap: 11 },
+  settingsInfoText: { flex: 1, color: '#64748B', fontSize: 12 },
+  settingsDoneButton: { backgroundColor: '#2563EB', borderRadius: 14, alignItems: 'center', justifyContent: 'center', minHeight: 48, marginTop: 18 },
+  settingsDoneText: { color: '#FFFFFF', fontSize: 14, fontWeight: '800' },
+  designGridRow: { justifyContent: 'space-between', gap: 12 },
+  designRow: { width: '48%', backgroundColor: '#F8FAFC', borderWidth: 1, borderColor: '#E2E8F0', borderRadius: 14, padding: 8, marginBottom: 12 },
+  designImage: { width: '100%', height: 110, borderRadius: 10, backgroundColor: '#F1F5F9' },
+  designImagePlaceholder: { width: '100%', height: 110, borderRadius: 10, backgroundColor: '#F1F5F9', alignItems: 'center', justifyContent: 'center' },
+  designInfo: { flex: 1 },
+  designTitle: { color: '#0F172A', fontSize: 14, fontWeight: '700' },
+  designMeta: { color: '#64748B', fontSize: 12, marginTop: 3 },
+  pagination: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingTop: 12 },
+  pageText: { color: '#2563EB', fontWeight: '700', fontSize: 13 },
+  pageNumber: { color: '#64748B', fontSize: 12 },
+  checklistRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#F1F5F9' },
+  checklistText: { flex: 1, color: '#334155', fontSize: 14 },
 });

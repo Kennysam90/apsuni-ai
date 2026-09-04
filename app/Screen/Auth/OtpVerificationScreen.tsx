@@ -10,17 +10,24 @@ import {
   StatusBar,
   Dimensions,
 } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
-import { Ionicons, FontAwesome5, MaterialIcons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
+import { Ionicons, MaterialIcons } from '@expo/vector-icons';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import BackButton from '../../components/BackButton';
+import AnimatedAuroraBackground from '../../components/AnimatedAuroraBackground';
+import LoadingButton from '../../components/LoadingButton';
+import { useAppAlert } from '../../components/AppAlert';
+import { register } from '../../services/api';
 
 const { width } = Dimensions.get('window');
 
 export default function OtpVerificationScreen() {
   const router = useRouter();
   const userEmail = 'example@gmail.com';
-  const [otp, setOtp] = useState(['1', '', '', '', '', '']);
+  const params = useLocalSearchParams<{ email?: string; fullName?: string; password?: string }>();
+  const email = params.email || userEmail;
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const { showAlert } = useAppAlert();
+  const [otp, setOtp] = useState(['', '', '', '', '', '']);
   const inputRefs = useRef<(TextInput | null)[]>([]);
 
   const handleOtpChange = (text: string, index: number) => {
@@ -40,7 +47,8 @@ export default function OtpVerificationScreen() {
   };
 
   return (
-    <LinearGradient colors={['#070E26', '#040711', '#091330']} style={styles.background}>
+    <View style={styles.background}>
+      <AnimatedAuroraBackground />
       <SafeAreaView style={{ flex: 1 }}>
         <StatusBar barStyle="light-content" />
         <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
@@ -55,7 +63,7 @@ export default function OtpVerificationScreen() {
 
           {/* Hero Artwork */}
           <View style={styles.otpHero}>
-            <FontAwesome5 name="plane" size={100} color="rgba(255, 255, 255, 0.12)" style={styles.otpHeroPlane} />
+            <MaterialIcons name="verified-user" size={92} color="rgba(96, 165, 250, 0.22)" style={styles.otpHeroPlane} />
           </View>
 
           {/* Card Container */}
@@ -73,7 +81,7 @@ export default function OtpVerificationScreen() {
             <Text style={styles.checkEmailTitle}>Check your Email</Text>
             <Text style={styles.checkEmailSub}>
               Enter the unique code we sent to{'\n'}
-              <Text style={styles.userEmailText}>{userEmail}</Text> below
+              <Text style={styles.userEmailText}>{email}</Text> below
             </Text>
 
             {/* 6 Digital OTP Boxes */}
@@ -113,20 +121,30 @@ export default function OtpVerificationScreen() {
             </View>
 
             {/* Verify & Continue Button */}
-            <TouchableOpacity
+            <LoadingButton
+              label="Verify & Continue"
+              loading={isSubmitting}
               style={styles.primaryBtn}
-              activeOpacity={0.85}
-              onPress={() => router.replace('/(tabs)')}
-            >
-              <View style={styles.btnContentRow}>
-                <Text style={styles.primaryBtnText}>Verify & Continue</Text>
-                <Ionicons name="arrow-forward" size={18} color="#FFFFFF" style={{ marginLeft: 6 }} />
-              </View>
-            </TouchableOpacity>
+              onPress={async () => {
+                if (otp.join('').length !== 6 || !params.password || !params.fullName) {
+                  showAlert('Enter the six-digit code to continue.');
+                  return;
+                }
+                setIsSubmitting(true);
+                try {
+                  await register({ email, username: email.split('@')[0], password: params.password, password2: params.password, first_name: params.fullName, otp: otp.join('') });
+                  router.replace('/Screen/Auth/SignInScreen');
+                } catch (requestError) {
+                  showAlert({ title: 'Verification failed', message: requestError instanceof Error ? requestError.message : 'The code could not be verified.' });
+                } finally {
+                  setIsSubmitting(false);
+                }
+              }}
+            />
           </View>
         </ScrollView>
       </SafeAreaView>
-    </LinearGradient>
+    </View>
   );
 }
 

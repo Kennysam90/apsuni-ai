@@ -7,10 +7,13 @@ import {
   Switch,
   SafeAreaView,
   StatusBar,
+  ScrollView,
+  ActivityIndicator,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Feather } from '@expo/vector-icons';
 import BackButton from '../../components/BackButton';
+import { useAppAlert } from '../../components/AppAlert';
 
 interface Plan {
   id: string;
@@ -80,7 +83,7 @@ const PLANS: Plan[] = [
 
 interface PremiumScreenProps {
   onBack?: () => void;
-  onSubscribe?: (planId: string) => void;
+  onSubscribe?: (planId: string) => void | Promise<void>;
   onPressPrivacy?: () => void;
   onPressTerms?: () => void;
   onPressRestore?: () => void;
@@ -95,8 +98,25 @@ export default function PremiumScreen({
 }: PremiumScreenProps) {
   const [isFreeTrialEnabled, setIsFreeTrialEnabled] = useState(true);
   const [selectedPlanId, setSelectedPlanId] = useState<string>('monthly');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const { showAlert } = useAppAlert();
 
   const selectedPlan = PLANS.find((p) => p.id === selectedPlanId) || PLANS[1];
+
+  const handleSubscribe = async () => {
+    if (!onSubscribe) {
+      showAlert('Subscription checkout is not connected yet.');
+      return;
+    }
+    setIsSubmitting(true);
+    try {
+      await onSubscribe(selectedPlan.id);
+    } catch (error) {
+      showAlert(error instanceof Error ? error.message : 'Subscription could not be started.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
   return (
     <View style={styles.container}>
@@ -120,7 +140,12 @@ export default function PremiumScreen({
         </View>
 
         {/* Fixed Content */}
-        <View style={styles.scrollContent}>
+        <ScrollView
+          style={styles.scrollContent}
+          contentContainerStyle={styles.scrollContentContent}
+          showsVerticalScrollIndicator={false}
+          bounces
+        >
           {/* Hero Header Section */}
           <View style={styles.heroSection}>
             <Text style={styles.mainHeadline}>
@@ -218,7 +243,7 @@ export default function PremiumScreen({
               );
             })}
           </View>
-        </View>
+        </ScrollView>
 
         {/* Fixed Bottom Bar */}
         <View style={styles.fixedBottomContainer}>
@@ -230,7 +255,8 @@ export default function PremiumScreen({
           {/* Primary CTA Button */}
           <TouchableOpacity
             activeOpacity={0.85}
-            onPress={() => onSubscribe?.(selectedPlan.id)}
+            onPress={handleSubscribe}
+            disabled={isSubmitting}
             style={styles.ctaButtonWrapper}
           >
             <LinearGradient
@@ -239,12 +265,10 @@ export default function PremiumScreen({
               end={{ x: 1, y: 0 }}
               style={styles.ctaGradient}
             >
-              <Text style={styles.ctaText}>
-                {isFreeTrialEnabled
-                  ? `Try ${selectedPlan.title} Free`
-                  : `Get ${selectedPlan.title}`}
-              </Text>
-              <Feather name="chevron-right" size={20} color="#FFFFFF" style={styles.ctaIcon} />
+              {isSubmitting ? <ActivityIndicator color="#FFFFFF" /> : <>
+                <Text style={styles.ctaText}>{isFreeTrialEnabled ? `Try ${selectedPlan.title} Free` : `Get ${selectedPlan.title}`}</Text>
+                <Feather name="chevron-right" size={20} color="#FFFFFF" style={styles.ctaIcon} />
+              </>}
             </LinearGradient>
           </TouchableOpacity>
 
@@ -295,9 +319,12 @@ const styles = StyleSheet.create({
     width: 40,
   },
   scrollContent: {
+    flex: 1,
+  },
+  scrollContentContent: {
     paddingHorizontal: 24,
     paddingTop: 16,
-    paddingBottom: 20,
+    paddingBottom: 28,
   },
   heroSection: {
     alignItems: 'center',

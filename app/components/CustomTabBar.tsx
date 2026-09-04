@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Pressable,
@@ -10,7 +10,9 @@ import {
   ViewStyle,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useRouter } from 'expo-router';
+import { usePathname, useRouter } from 'expo-router';
+import SideMenuCard from './SideMenuCard';
+import DesignGalleryPopup from './DesignGalleryPopup';
 
 const { width } = Dimensions.get('window');
 
@@ -77,7 +79,17 @@ export default function CustomTabBar({
   navigation,
 }: CustomTabBarProps) {
   const router = useRouter();
-  const activeRouteName = state?.routes[state.index]?.name;
+  const pathname = usePathname();
+  const [isSideMenuVisible, setIsSideMenuVisible] = useState(false);
+  const [isGalleryVisible, setIsGalleryVisible] = useState(false);
+  const activeRouteName = state?.routes[state.index]?.name ?? pathname;
+  const isHomeActive = activeRouteName === 'index' || activeRouteName === '/' || activeRouteName === '/(tabs)' || activeRouteName === '/(tabs)/';
+  const isVoiceActive = pathname.includes('VoiceAssessmentScreen');
+  const isSearchActive = activeRouteName === 'search' || pathname.includes('/search');
+  const isMenuActive =
+    activeRouteName === 'menu' ||
+    pathname.includes('/menu') ||
+    pathname.includes('SideMenuCardScreen');
 
   const navigate = (routeName: string) => {
     if (!state || !navigation) {
@@ -107,14 +119,14 @@ export default function CustomTabBar({
   };
 
   return (
-    <View style={styles.container}>
+    <View style={styles.container} pointerEvents="box-none">
       <View style={styles.tabBar}>
 
         {/* HOME */}
         <Pressable
           style={[
             styles.tabItem,
-            activeRouteName === 'index' && styles.activeTab,
+            isHomeActive && styles.activeTab,
           ]}
           onPress={() => navigate('index')}
         >
@@ -127,8 +139,8 @@ export default function CustomTabBar({
 
         {/* GRID */}
         <Pressable
-          style={styles.tabItem}
-          onPress={() => navigate('explore')}
+          style={[styles.tabItem]}
+          onPress={() => router.push('/Screen/Project-screen/ProjectScreen')}
         >
           <Image
             source={require('@/assets/images/tabs-icon/menu (1).png')}
@@ -139,6 +151,7 @@ export default function CustomTabBar({
 
         {/* CENTER */}
         <CenterButton
+          style={isVoiceActive && styles.activeCenterWrapper}
           onPress={() => {
             router.push('/Screen/VoiceAssessmentScreen/VoiceAssessmentScreen');
           }}
@@ -146,8 +159,8 @@ export default function CustomTabBar({
 
         {/* SEARCH */}
         <Pressable
-          style={styles.tabItem}
-          onPress={() => navigate('search')}
+          style={[styles.tabItem, isSearchActive && styles.activeTab]}
+          onPress={() => setIsGalleryVisible(true)}
         >
           <Image
             source={require('@/assets/images/tabs-icon/search.png')}
@@ -158,8 +171,8 @@ export default function CustomTabBar({
 
         {/* MENU */}
         <Pressable
-          style={styles.tabItem}
-          onPress={() => navigate('menu')}
+          style={[styles.tabItem, (isMenuActive || isSideMenuVisible) && styles.activeTab]}
+          onPress={() => setIsSideMenuVisible(true)}
         >
           <Image
             source={require('@/assets/images/tabs-icon/menu.png')}
@@ -169,6 +182,17 @@ export default function CustomTabBar({
         </Pressable>
 
       </View>
+
+      <SideMenuCard
+        visible={isSideMenuVisible}
+        onClose={() => setIsSideMenuVisible(false)}
+      />
+
+      <DesignGalleryPopup
+        visible={isGalleryVisible}
+        onClose={() => setIsGalleryVisible(false)}
+      />
+
     </View>
   );
 }
@@ -178,11 +202,14 @@ const styles = StyleSheet.create({
     position: 'absolute',
     left: 0,
     right: 0,
+    top: 0,
     bottom: 0,
 
     alignItems: 'center',
+    justifyContent: 'flex-end',
 
-    paddingBottom: 16,
+    // Lift the floating tab bar slightly above the bottom edge.
+    paddingBottom: 48,
     paddingHorizontal: 14,
   },
 
@@ -233,6 +260,10 @@ const styles = StyleSheet.create({
 
     alignItems: 'center',
     justifyContent: 'center',
+  },
+
+  activeCenterWrapper: {
+    transform: [{ scale: 1.06 }],
   },
 
   centerPressed: {

@@ -6,8 +6,9 @@ import {
   TouchableOpacity,
   SafeAreaView,
   StatusBar,
+  Image,
   ImageBackground,
-  useWindowDimensions,
+  useWindowDimensions
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
@@ -39,9 +40,14 @@ export default function AuroraHomeScreen() {
         <View style={[styles.header, isCompactScreen && styles.compactHeader]}>
           <View style={styles.brandRow}>
             <View style={styles.logoBadge}>
-              <MaterialCommunityIcons name="atom" size={20} color="#60A5FA" />
+              <Image
+                 source={{
+                  uri: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?q=80&w=300&auto=format&fit=crop',
+                   }}
+                  style={styles.profileImage}
+              />
             </View>
-            <Text style={styles.brandTitle}>Aurora AI</Text>
+            <Text style={styles.brandTitle}>Apsuni AI</Text>
           </View>
 
           {/* Pro Pill Button */}
@@ -99,7 +105,7 @@ export default function AuroraHomeScreen() {
               isCompactScreen && styles.compactHeroTextSection,
             ]}
           >
-            <Text style={styles.mainTitle}>Hello I’m Aurora</Text>
+            <Text style={styles.mainTitle}>Hello I’m Apsuni Ai</Text>
             <Text style={styles.mainSubtitle}>Your AI digital partners</Text>
           </View>
 
@@ -213,7 +219,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 20,
-    paddingTop: 10,
+    paddingTop: 30,
     paddingBottom: 12,
   },
   compactHeader: {
@@ -223,7 +229,7 @@ const styles = StyleSheet.create({
   brandRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
+    gap: 15,
   },
   logoBadge: {
     width: 36,
@@ -234,6 +240,14 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(255, 255, 255, 0.12)',
     alignItems: 'center',
     justifyContent: 'center',
+    paddingTop: 5,
+  },
+  profileImage: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    backgroundColor: '#FCE7F3',
+    
   },
   brandTitle: {
     fontSize: 20,
@@ -255,9 +269,9 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     paddingHorizontal: 20,
-    paddingTop: 10,
+    paddingTop: 5,
     // Keep the last content clear of the fixed tab bar.
-    paddingBottom: 96,
+    paddingBottom: 100,
   },
   compactScrollContent: {
     paddingTop: 4,
