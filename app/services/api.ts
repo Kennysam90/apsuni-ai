@@ -1,8 +1,20 @@
+import { setUserCountry } from './currency';
+
 // Production API. Override with EXPO_PUBLIC_API_URL for local development.
 const API_BASE_URL = (process.env.EXPO_PUBLIC_API_URL || 'https://api.apsuni.com/api').replace(/\/$/, '');
 
 let accessToken: string | null = null;
 let refreshToken: string | null = null;
+const cartCountListeners = new Set<(count: number) => void>();
+
+export function subscribeToCartCount(listener: (count: number) => void) {
+  cartCountListeners.add(listener);
+  return () => cartCountListeners.delete(listener);
+}
+
+function notifyCartCount(count: number) {
+  cartCountListeners.forEach((listener) => listener(count));
+}
 
 export type AssistantResponse = {
   conversation_id: string;
@@ -31,6 +43,25 @@ export type Project = {
   team_members?: ProjectTeamMember[];
 };
 
+export type TeamMember = {
+  membership_id: string;
+  role: 'lead' | 'member' | string;
+  id: number;
+  username: string;
+  full_name: string;
+  profile_image?: string | null;
+};
+export type Team = {
+  id: string;
+  name: string;
+  description?: string | null;
+  category?: string | null;
+  category_id?: string | null;
+  total_projects?: number;
+  created_at?: string;
+  members?: TeamMember[];
+};
+
 export function setAuthTokens(tokens: { access?: string; refresh?: string }) {
   accessToken = tokens.access || null;
   refreshToken = tokens.refresh || null;
@@ -43,6 +74,7 @@ export function clearAuthTokens() {
 
 export function logout() {
   clearAuthTokens();
+  setUserCountry(null);
 }
 
 export function getAccessToken() {
@@ -170,14 +202,66 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const response = await fetch(`${API_BASE_URL}${path}`, { ...options, headers });
   const body = await response.json().catch(() => ({}));
   if (!response.ok) {
-    const detail = body.detail || body.error || body.message || 'The request failed.';
-    throw new Error(typeof detail === 'string' ? detail : JSON.stringify(detail));
+    // A crash returns an HTML page, which leaves nothing readable in `body`.
+    const fallback = response.status >= 500
+      ? `The server hit an error (${response.status}). Please try again shortly.`
+      : `The request failed (${response.status}).`;
+    throw new Error(formatApiError(body) || fallback);
   }
   return body as T;
 }
 
+/**
+ * Flattens the backend's error envelopes into one readable sentence, e.g.
+ * {"error":{"detail":{"phone":["This field is required."]}}} -> "Phone: This field is required."
+ */
+function formatApiError(value: unknown): string {
+  if (value == null) return '';
+  if (typeof value === 'string') return value;
+  if (Array.isArray(value)) return value.map(formatApiError).filter(Boolean).join(' ');
+  if (typeof value !== 'object') return String(value);
+
+  const record = value as Record<string, unknown>;
+  for (const key of ['detail', 'details', 'error', 'message', 'non_field_errors']) {
+    if (record[key] != null) return formatApiError(record[key]);
+  }
+
+  return Object.entries(record)
+    .filter(([key]) => key !== 'status_code' && key !== 'code')
+    .map(([key, message]) => {
+      const text = formatApiError(message);
+      const label = key.replace(/_/g, ' ').replace(/^./, (character) => character.toUpperCase());
+      return text ? `${label}: ${text}` : '';
+    })
+    .filter(Boolean)
+    .join(' ');
+}
+
+export type UserProfile = {
+  id: number;
+  username: string;
+  first_name?: string | null;
+  email: string;
+  image?: string | null;
+  country?: string | null;
+  country_name?: string | null;
+  currency?: string | null;
+  currency_symbol?: string | null;
+};
+
+/** The signed-in user's profile. Loading it also switches the app to the user's currency. */
+export async function getProfile() {
+  const profile = await request<UserProfile>('/profile/');
+  setUserCountry(profile.country);
+  return profile;
+}
+
 export function listProjects() {
   return request<{ projects: Project[] }>('/deploy/projects/list/');
+}
+
+export function listTeams() {
+  return request<Team[]>('/deploy/teams/mine/');
 }
 
 export async function login(email: string, password: string) {
@@ -186,6 +270,8 @@ export async function login(email: string, password: string) {
     body: JSON.stringify({ email, password }),
   });
   setAuthTokens(tokens);
+  // Pick up the user's country so prices show in their currency straight away.
+  getProfile().catch(() => undefined);
   return tokens;
 }
 
@@ -193,7 +279,7 @@ export async function sendSignupOtp(email: string) {
   return request<{ message: string }>('/otp-send/', { method: 'POST', body: JSON.stringify({ email }) });
 }
 
-export async function register(payload: { email: string; username: string; password: string; password2: string; first_name: string; otp: string }) {
+export async function register(payload: { email: string; username: string; password: string; password2: string; first_name: string; last_name: string; phone: string; country: string; accept_terms: boolean; otp: string }) {
   return request<{ message: string }>('/register/', { method: 'POST', body: JSON.stringify(payload) });
 }
 
@@ -249,6 +335,27 @@ export async function searchDesigns(query: string, category: 'Mobile App' | 'Web
   return request<{ products: DesignResult[]; page: number; pages: number }>(`/search/?${params}`);
 }
 
+export async function searchMarketplaceProducts(query: string, category: 'Mobile App' | 'Website', file = '', page = 1) {
+  const params = new URLSearchParams({ q: query, category, file, brand: '', product_type: '', min_price: '1', max_price: '10000', page: String(page) });
+  return request<{ products: DesignResult[]; page: number; pages: number }>(`/search/?${params}`);
+}
+
+/**
+ * Screenshot gallery for a product - the mobile preview shows these instead of
+ * the demo site. Paths come back as "/media/product-images/01_thumb.png".
+ */
+export async function getProductImages(productId: string | number) {
+  const body = await request<any>(`/product-images/?pid=${encodeURIComponent(String(productId))}`);
+
+  const list = Array.isArray(body)
+    ? body
+    : [body?.product_images, body?.images, body?.data, body?.results].find(Array.isArray) ?? [];
+
+  return (list as any[])
+    .map((item) => (typeof item === 'string' ? item : item?.images || item?.image || item?.url || item?.thumb || item?.path))
+    .filter((value): value is string => typeof value === 'string' && value.length > 0);
+}
+
 export async function createEditory(payload: Record<string, unknown>) {
   return request<{ success: boolean; data: Editory; message?: string }>('/add-to-editory/', {
     method: 'POST', body: JSON.stringify(payload),
@@ -265,14 +372,143 @@ export async function listEditories() {
   return request<{ products: Editory[] }>('/editory-list/');
 }
 
+export async function deleteBucketItem(editoryId: number) {
+  return request<{ status?: boolean; message?: string }>('/delete-bucket-item/', {
+    method: 'DELETE', body: JSON.stringify({ product_id: editoryId }),
+  });
+}
+
 export async function addEditoryToCart(editoryId: number, quantity = 1) {
-  return request<{ status: boolean; total_items: number }>('/add-to-cart/', {
+  const result = await request<{ status: boolean; total_items: number }>('/add-to-cart/', {
     method: 'POST', body: JSON.stringify({ product_id: editoryId, quantity }),
   });
+  notifyCartCount(result.total_items);
+  return result;
 }
 
 export async function viewCart() {
   return request<{ status: boolean; data: Record<string, any>; total_items: number }>('/view-cart/');
+}
+
+export type CustomerOrderProduct = {
+  id: number;
+  product_id: number;
+  product_name: string;
+  product_image?: string | null;
+  product_company_logo?: string | null;
+  company_name?: string | null;
+  description?: string | null;
+  rating?: number | null;
+  qty: number;
+  price: string;
+  total: string;
+  total_product_price: number;
+  product_demo?: string | null;
+};
+
+export type CustomerOrder = {
+  id: number;
+  quantity: number | null;
+  total_price: string;
+  product_status: string;
+  payment_status: string;
+  order_date: string;
+  sku?: string | null;
+  name?: string | null;
+  company_logo?: string | null;
+  email?: string | null;
+  buyer_name?: string | null;
+  paid_status?: boolean;
+  payment_type?: string | null;
+  importance?: string | null;
+  progress_count?: number | null;
+  products?: CustomerOrderProduct[];
+};
+
+export async function listCustomerOrders(status = '') {
+  return request<{ product_count: number; orders: CustomerOrder[] }>('/customer_orders_&_cancel/', {
+    method: 'POST',
+    body: JSON.stringify({ statuse: status }),
+  });
+}
+
+export type CustomerOrderProductsResponse = {
+  order_id: number;
+  products: CustomerOrderProduct[];
+  products_count: number;
+};
+
+export async function getOrderProducts(orderId: number) {
+  return request<CustomerOrderProductsResponse>(`/orders/${orderId}/products/`);
+}
+
+export async function cancelOrder(orderId: number) {
+  return request<{ status: string; detail: string; order?: Record<string, any> }>(`/orders/${orderId}/cancel/`, {
+    method: 'POST',
+  });
+}
+
+export type WalletMember = { id: number; username: string; email: string };
+
+export type WalletAccount = {
+  id: string;
+  account_type: 'personal' | 'team' | 'credit' | string;
+  name: string;
+  balance: string;
+  owner?: WalletMember;
+  members?: WalletMember[];
+  max_members?: number;
+  allow_withdrawals?: boolean;
+  created_at?: string;
+};
+
+export type SavedCard = {
+  id: string;
+  last4: string;
+  brand: string;
+  expiry_month?: string | null;
+  expiry_year?: string | null;
+  is_default?: boolean;
+  active?: boolean;
+};
+
+export type CardFundingResult = {
+  status: 'success' | 'already_processed' | 'cancelled' | 'failed' | string;
+  amount?: string;
+  tx_ref?: string;
+  detail?: string;
+  wallet?: WalletAccount;
+};
+
+export function listWalletAccounts() {
+  return request<WalletAccount[]>('/wallets/');
+}
+
+export async function listSavedCards() {
+  const result = await request<{ status: string; cards?: SavedCard[] }>('/cards/');
+  return result.cards ?? [];
+}
+
+/** Backend allows one wallet per account type; an existing one is returned as-is. */
+export function createWalletAccount(payload: { account_type: string; name?: string }) {
+  return request<WalletAccount>('/wallets/create/', { method: 'POST', body: JSON.stringify(payload) });
+}
+
+/** Starts a Flutterwave hosted checkout and returns the payment link. */
+export function initiateCardFunding(payload: { wallet_id: string; amount: number; redirect_url?: string }) {
+  return request<{ status: string; payment_link: string; tx_ref: string; funding_request_id: string }>('/fund/card/initiate/', {
+    method: 'POST', body: JSON.stringify(payload),
+  });
+}
+
+/** Confirms a completed checkout with the backend, which credits the wallet. */
+export function verifyCardFunding(payload: { transaction_id: string; tx_ref: string; status: string; save_card?: boolean }) {
+  return request<CardFundingResult>('/fund/card/verify/', { method: 'POST', body: JSON.stringify(payload) });
+}
+
+/** Charges a saved card directly; no checkout page is involved. */
+export function fundWithSavedCard(payload: { wallet_id: string; saved_card_id: string; amount: number }) {
+  return request<CardFundingResult>('/fund/saved-card/', { method: 'POST', body: JSON.stringify(payload) });
 }
 
 export async function listWallets() {
@@ -283,6 +519,15 @@ export async function checkoutWithWallet(deliveryAddress: { address: string; mob
   return request<{ status: boolean; message: string; data?: Record<string, any> }>('/checkout/?payment_type=wallet', {
     method: 'POST', body: JSON.stringify({ delivery_address: deliveryAddress }),
   });
+}
+
+/** Pays the whole cart from the wallet holding the given currency (e.g. USDTTRC20). */
+export async function payCartWithWallet(currency: string) {
+  return request<{ status?: boolean; message?: string; data?: Record<string, any> }>(
+    `/checkout/?payment_type=wallet&currency=${encodeURIComponent(currency)}`,
+    // The endpoint rejects an empty body ("no data provided"); the website sends this same placeholder address.
+    { method: 'POST', body: JSON.stringify({ delivery_address: { mobile: '09012345678', address: '123 Apapa Lane, Lagos, Nigeria', status: true } }) },
+  );
 }
 
 export async function fetchConversationToken(): Promise<string | { agent_id: string }> {

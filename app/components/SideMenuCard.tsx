@@ -12,11 +12,10 @@ import {
 } from 'react-native';
 import {
   Feather,
-  Octicons,
   MaterialCommunityIcons,
 } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import { logout } from '../services/api';
+import { getAccessToken, getApiAssetUrl, getProfile, logout, type UserProfile } from '../services/api';
 
 interface SideMenuCardProps {
   visible?: boolean;
@@ -28,6 +27,36 @@ export default function FloatingSideCardsScreen({ visible = true, onClose }: Sid
   const [selectedWorkspace, setSelectedWorkspace] = useState('widelab');
   const [mounted, setMounted] = useState(visible);
   const slideX = React.useRef(new Animated.Value(-390)).current;
+  const [profile, setProfile] = useState<UserProfile | null>(null);
+  const [profileLoading, setProfileLoading] = useState(false);
+  const [imageFailed, setImageFailed] = useState(false);
+
+  // Refresh the profile each time the menu opens, so a new sign-in shows up.
+  React.useEffect(() => {
+    if (!visible || !getAccessToken()) return;
+
+    let isActive = true;
+    setProfileLoading(true);
+    getProfile()
+      .then((result) => {
+        if (!isActive) return;
+        setProfile(result);
+        setImageFailed(false);
+      })
+      .catch(() => {
+        if (isActive) setProfile(null);
+      })
+      .finally(() => {
+        if (isActive) setProfileLoading(false);
+      });
+
+    return () => { isActive = false; };
+  }, [visible]);
+
+  const profileImageUrl = profile?.image ? getApiAssetUrl(profile.image) : null;
+  const profileUsername = profile?.first_name?.trim() || profile?.username || profile?.email?.split('@')[0] || (profileLoading ? 'Loading…' : 'Guest');
+  const profileEmail = profile?.email || (profileLoading ? '' : 'Sign in to see your account');
+  const profileInitial = (profile?.first_name?.trim() || profile?.username || profile?.email || '?').charAt(0).toUpperCase();
 
   React.useEffect(() => {
     slideX.stopAnimation();
@@ -74,14 +103,18 @@ export default function FloatingSideCardsScreen({ visible = true, onClose }: Sid
               selectedWorkspace === 'mercedes' && styles.selectedRow,
             ]}
             activeOpacity={0.75}
-            onPress={() => setSelectedWorkspace('mercedes')}
+            onPress={() => {
+              setSelectedWorkspace('mercedes');
+              onClose?.();
+              router.push('/Screen/Business-Idea-Screen/BusinessIdeaScreen');
+            }}
           >
             
             <View style={[styles.iconBox, { backgroundColor: '#000000' }]}>
-              <MaterialCommunityIcons name="car-sports" size={16} color="#FFFFFF" />
+              <MaterialCommunityIcons name="lightbulb-on-outline" size={18} color="#FFFFFF" />
             </View>
             <View style={styles.itemTextContainer}>
-              <Text style={styles.itemTitle}>Mercedes</Text>
+              <Text style={styles.itemTitle}>Business Ideas</Text>
               <Text style={styles.itemSubtitle}>Team Plan • 4.5k members</Text>
             </View>
           </TouchableOpacity>
@@ -148,15 +181,20 @@ export default function FloatingSideCardsScreen({ visible = true, onClose }: Sid
         <View style={styles.profileCard}>
           {/* Profile Header */}
           <View style={styles.profileHeader}>
-            <Image
-              source={{
-                uri: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?q=80&w=300&auto=format&fit=crop',
-              }}
-              style={styles.profileImage}
-            />
+            {profileImageUrl && !imageFailed ? (
+              <Image
+                source={{ uri: profileImageUrl }}
+                style={styles.profileImage}
+                onError={() => setImageFailed(true)}
+              />
+            ) : (
+              <View style={[styles.profileImage, styles.profileImageFallback]}>
+                <Text style={styles.profileInitial}>{profileInitial}</Text>
+              </View>
+            )}
             <View style={styles.profileInfo}>
-              <Text style={styles.profileName}>Sandra Marx</Text>
-              <Text style={styles.profileEmail}>sandra@gmail.com</Text>
+              <Text style={styles.profileName} numberOfLines={1}>{profileUsername}</Text>
+              {profileEmail ? <Text style={styles.profileEmail} numberOfLines={1}>{profileEmail}</Text> : null}
             </View>
           </View>
 
@@ -169,24 +207,26 @@ export default function FloatingSideCardsScreen({ visible = true, onClose }: Sid
               <Text style={styles.menuLabel}>API Diagnostics</Text>
             </TouchableOpacity>
 
-            <TouchableOpacity style={styles.menuItem} activeOpacity={0.7}>
-              <Feather name="folder" size={18} color="#475569" />
-              <Text style={styles.menuLabel}>Integrations</Text>
-            </TouchableOpacity>
+          
 
             <TouchableOpacity style={styles.menuItem} activeOpacity={0.7} onPress={() => { onClose?.(); router.push('/Screen/ChatHistoryScreen'); }}>
               <Feather name="clock" size={18} color="#475569" />
-              <Text style={styles.menuLabel}>History</Text>
+              <Text style={styles.menuLabel}>Chat History</Text>
             </TouchableOpacity>
 
-            <TouchableOpacity style={styles.menuItem} activeOpacity={0.7}>
+            <TouchableOpacity style={styles.menuItem} activeOpacity={0.7} onPress={() => { onClose?.(); router.push('/Screen/Order-Screen/OrderHistoryScreen'); }}>
+              <Feather name="shopping-bag" size={18} color="#10B981" />
+              <Text style={styles.menuLabel}>Order History</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity style={styles.menuItem} activeOpacity={0.7} onPress={() => { onClose?.(); router.push('/Screen/Premium-Screen/PremiumScreen'); }}>
               <Feather name="star" size={18} color="#F59E0B" />
               <Text style={styles.menuLabel}>Upgrade to Pro</Text>
             </TouchableOpacity>
 
-            <TouchableOpacity style={[styles.menuItem, styles.updateAppHighlight]} activeOpacity={0.8}>
-              <Octicons name="dot-fill" size={16} color="#10B981" />
-              <Text style={styles.updateAppLabel}>Update App</Text>
+            <TouchableOpacity style={[styles.menuItem, styles.updateAppHighlight]} activeOpacity={0.8} onPress={() => { onClose?.(); router.push('/Screen/Wallet-Screen/FundWalletScreen'); }}>
+              <MaterialCommunityIcons name="wallet-plus-outline" size={18} color="#10B981" />
+              <Text style={styles.updateAppLabel}>Fund Wallet</Text>
             </TouchableOpacity>
 
             <TouchableOpacity style={styles.menuItem} activeOpacity={0.7} onPress={() => { logout(); onClose?.(); router.replace('/Screen/Auth/SignInScreen'); }}>
@@ -343,8 +383,20 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     backgroundColor: '#FCE7F3',
   },
+  profileImageFallback: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#DBEAFE',
+  },
+  profileInitial: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#2563EB',
+  },
   profileInfo: {
     marginLeft: 12,
+    flex: 1,
+    minWidth: 0,
   },
   profileName: {
     fontSize: 17,

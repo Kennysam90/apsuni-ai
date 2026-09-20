@@ -12,7 +12,6 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import { usePathname, useRouter } from 'expo-router';
 import SideMenuCard from './SideMenuCard';
-import DesignGalleryPopup from './DesignGalleryPopup';
 
 const { width } = Dimensions.get('window');
 
@@ -81,11 +80,11 @@ export default function CustomTabBar({
   const router = useRouter();
   const pathname = usePathname();
   const [isSideMenuVisible, setIsSideMenuVisible] = useState(false);
-  const [isGalleryVisible, setIsGalleryVisible] = useState(false);
   const activeRouteName = state?.routes[state.index]?.name ?? pathname;
-  const isHomeActive = activeRouteName === 'index' || activeRouteName === '/' || activeRouteName === '/(tabs)' || activeRouteName === '/(tabs)/';
+  const isHomeActive = activeRouteName === 'index' || pathname === '/' || pathname === '/(tabs)';
+  const isProjectsActive = pathname.includes('Project-screen/ProjectScreen');
   const isVoiceActive = pathname.includes('VoiceAssessmentScreen');
-  const isSearchActive = activeRouteName === 'search' || pathname.includes('/search');
+  const isSearchActive = pathname.includes('Search-Screen/Search');
   const isMenuActive =
     activeRouteName === 'menu' ||
     pathname.includes('/menu') ||
@@ -139,7 +138,7 @@ export default function CustomTabBar({
 
         {/* GRID */}
         <Pressable
-          style={[styles.tabItem]}
+          style={[styles.tabItem, isProjectsActive && styles.activeTab]}
           onPress={() => router.push('/Screen/Project-screen/ProjectScreen')}
         >
           <Image
@@ -160,7 +159,7 @@ export default function CustomTabBar({
         {/* SEARCH */}
         <Pressable
           style={[styles.tabItem, isSearchActive && styles.activeTab]}
-          onPress={() => setIsGalleryVisible(true)}
+          onPress={() => router.push('/Screen/Search-Screen/Search')}
         >
           <Image
             source={require('@/assets/images/tabs-icon/search.png')}
@@ -186,11 +185,6 @@ export default function CustomTabBar({
       <SideMenuCard
         visible={isSideMenuVisible}
         onClose={() => setIsSideMenuVisible(false)}
-      />
-
-      <DesignGalleryPopup
-        visible={isGalleryVisible}
-        onClose={() => setIsGalleryVisible(false)}
       />
 
     </View>
@@ -239,8 +233,8 @@ const styles = StyleSheet.create({
   },
 
   tabItem: {
-    width: 65,
-    height: 65,
+    width: 60,
+    height: 60,
 
     alignItems: 'center',
     justifyContent: 'center',

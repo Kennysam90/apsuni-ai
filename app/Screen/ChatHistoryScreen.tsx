@@ -5,6 +5,7 @@ import { useRouter } from 'expo-router';
 import { getConversationHistory, type ConversationHistoryItem } from '../services/api';
 import AppBackground from '../components/AppBackground';
 import { useAppAlert } from '../components/AppAlert';
+import AppHeader from '../components/AppHeader';
 
 export default function ChatHistoryScreen() {
   const router = useRouter();
@@ -30,10 +31,7 @@ export default function ChatHistoryScreen() {
   return (
     <View style={styles.container}>
       <AppBackground />
-      <View style={styles.header}>
-        <Pressable onPress={() => router.back()} style={styles.back}><Feather name="arrow-left" size={21} color="#fff" /></Pressable>
-        <View><Text style={styles.title}>Chat history</Text><Text style={styles.subtitle}>Continue where you stopped</Text></View>
-      </View>
+      <AppHeader />
       {loading ? <ActivityIndicator color="#60A5FA" style={styles.loader} /> : (
         <FlatList
           data={items}

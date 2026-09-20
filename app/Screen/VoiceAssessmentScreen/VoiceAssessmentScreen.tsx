@@ -12,15 +12,15 @@ import {
   Image,
   Animated,
   Dimensions,
-  Platform, PermissionsAndroid, ActivityIndicator, Switch
+  Platform, PermissionsAndroid, ActivityIndicator, Switch, Easing
   , Modal, FlatList
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Feather, Ionicons, FontAwesome5, } from '@expo/vector-icons';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { Feather, Ionicons } from '@expo/vector-icons';
+import { useLocalSearchParams } from 'expo-router';
 import { ConversationProvider, useConversation } from '@elevenlabs/react-native';
 
-import BackButton from '../../components/BackButton';
+import AppHeader from '../../components/AppHeader';
 import AppBackground from '../../components/AppBackground';
 import CustomTabBar, { CenterButton } from '../../components/CustomTabBar';
 import VoiceOrb, { VoiceOrbHandle } from '../../components/VoiceOrb';
@@ -31,9 +31,10 @@ import {
   type DesignResult,
 } from '../../services/api';
 import { useAppAlert } from '../../components/AppAlert';
+import { formatMoney } from '../../services/currency';
 import DesignGalleryPopup from '@/app/components/DesignGalleryPopup';
 
-const { height: SCREEN_HEIGHT } = Dimensions.get('window');
+const { height: SCREEN_HEIGHT, width: SCREEN_WIDTH } = Dimensions.get('window');
 
 const COLLAPSED_OFFSET = SCREEN_HEIGHT;
 
@@ -46,12 +47,6 @@ const ORB_COLORS = {
 // ---------------------------------------------------------------------------
 // CONFIG — update these for your setup
 // ---------------------------------------------------------------------------
-// If nobody has spoken and the agent hasn't replied for this long, we end
-// the session ourselves. Safety net on top of whatever silence timeout you
-// set on the agent in the ElevenLabs dashboard — stops you being billed
-// for a connection nobody is using.
-// Tightened while actively testing so leaked sessions get caught fast —
-// raise back to 45s+ once things are stable.
 const DEFAULT_CHAT_GREETING = 'Good day. I’m Apsuni AI. Tell me about the business, brand, website, or mobile app you want to build.';
 
 interface VoiceAssessmentScreenProps {
@@ -63,46 +58,14 @@ interface VoiceAssessmentScreenProps {
 }
 
 const CREATIVE_TOOLS = [
-  {
-    id: '1',
-    label: 'Copywriter GPT - Marketing, Branding, Ads',
-    icon: 'pen-tool',
-  },
-  {
-    id: '2',
-    label: 'CV Writer - the CV Expert',
-    icon: 'file-text',
-  },
-  {
-    id: '3',
-    label: 'Write For Me',
-    icon: 'edit-3',
-  },
-  {
-    id: '4',
-    label: 'Automated Writer',
-    icon: 'sliders',
-  },
-  {
-    id: '5',
-    label: 'AI Humanizer Pro',
-    icon: 'user-check',
-  },
-  {
-    id: '6',
-    label: 'Text to Video Maker',
-    icon: 'video',
-  },
-  {
-    id: '7',
-    label: 'Humanize AI',
-    icon: 'cpu',
-  },
-  {
-    id: '8',
-    label: "Fully SEO Optimized Article including FAQ's",
-    icon: 'search',
-  },
+  { id: '1', label: 'Copywriter GPT - Marketing, Branding, Ads', icon: 'pen-tool' },
+  { id: '2', label: 'CV Writer - the CV Expert', icon: 'file-text' },
+  { id: '3', label: 'Write For Me', icon: 'edit-3' },
+  { id: '4', label: 'Automated Writer', icon: 'sliders' },
+  { id: '5', label: 'AI Humanizer Pro', icon: 'user-check' },
+  { id: '6', label: 'Text to Video Maker', icon: 'video' },
+  { id: '7', label: 'Humanize AI', icon: 'cpu' },
+  { id: '8', label: "Fully SEO Optimized Article including FAQ's", icon: 'search' },
 ];
 
 interface ChatMessage {
@@ -115,16 +78,21 @@ type FlowCategory = 'Mobile App' | 'Website';
 type ChecklistStep = { label?: string; title?: string; done?: boolean; completed?: boolean; [key: string]: any };
 type AssistantMode = 'Thinking' | 'Expert' | 'Vision';
 
+const getCartItems = (cart: Record<string, any> | null): Record<string, any>[] => {
+  if (!cart) return [];
+  const items = [cart.items, cart.cart_items, cart.products, cart.data].find(Array.isArray);
+  return items || [];
+};
+
+const getCartItemName = (item: Record<string, any>, index: number) =>
+  item.title || item.name || item.product?.title || item.product?.name || `Project ${index + 1}`;
+
 const ASSISTANT_MODES: { label: AssistantMode; icon: string; description: string }[] = [
   { label: 'Thinking', icon: 'cpu', description: 'Careful reasoning and balanced answers' },
   { label: 'Expert', icon: 'award', description: 'Detailed, professional guidance' },
   { label: 'Vision', icon: 'eye', description: 'Focus on images and visual ideas' },
 ];
 
-// ---------------------------------------------------------------------------
-// Default export — just wires up the ConversationProvider and renders the
-// actual screen inside it, since useConversation must be called from a
-// component that sits underneath the provider.
 // ---------------------------------------------------------------------------
 export default function VoiceAssessmentScreen(props: VoiceAssessmentScreenProps) {
   return <ConversationProvider><VoiceAssessmentScreenInner {...props} /></ConversationProvider>;
@@ -142,7 +110,6 @@ function VoiceAssessmentScreenInner({
     role: 'assistant',
     text: DEFAULT_CHAT_GREETING,
   }]);
-  const router = useRouter();
   const params = useLocalSearchParams<{ conversationId?: string }>();
   const initialConversationId = typeof params.conversationId === 'string' ? params.conversationId : undefined;
   const [isInputFocused, setIsInputFocused] = useState(false);
@@ -161,6 +128,7 @@ function VoiceAssessmentScreenInner({
   const [checklistVisible, setChecklistVisible] = useState(false);
   const [checklist, setChecklist] = useState<ChecklistStep[]>([]);
   const [cartVisible, setCartVisible] = useState(false);
+  const [cartLoading, setCartLoading] = useState(false);
   const [settingsVisible, setSettingsVisible] = useState(false);
   const [activeMode, setActiveMode] = useState<AssistantMode | null>(null);
   const [cart, setCart] = useState<Record<string, any> | null>(null);
@@ -169,6 +137,19 @@ function VoiceAssessmentScreenInner({
   const [flowProgress, setFlowProgress] = useState<string[]>([]);
   const { showAlert } = useAppAlert();
   const [isGalleryVisible, setIsGalleryVisible] = useState(false);
+  const cartDrawerX = useRef(new Animated.Value(SCREEN_WIDTH)).current;
+
+  const slideCartIn = () => {
+    cartDrawerX.setValue(SCREEN_WIDTH);
+    requestAnimationFrame(() => {
+      Animated.timing(cartDrawerX, {
+        toValue: 0,
+        duration: 520,
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: true,
+      }).start();
+    });
+  };
 
   useEffect(() => {
     if (!initialConversationId) return;
@@ -216,7 +197,6 @@ function VoiceAssessmentScreenInner({
     if (intent && intent !== 'build') return;
     const category = designCategoryFromPrompt(prompt);
     if (category) {
-      // The picker loads designs through the backend search API.
       openDesignSearch(category, prompt);
     }
   };
@@ -258,10 +238,8 @@ function VoiceAssessmentScreenInner({
         });
       }
       await addEditoryToCart(editory.id);
-      const currentCart = await viewCart();
-      setCart(currentCart.data);
-      setCartVisible(true);
       setDesignModalVisible(false);
+      openCart();
       markProgress('Design selected');
       markProgress('Project created');
       markProgress('Added to cart');
@@ -270,6 +248,17 @@ function VoiceAssessmentScreenInner({
     } finally {
       setDesignLoading(false);
     }
+  };
+
+  const closeCart = () => {
+    Animated.timing(cartDrawerX, {
+      toValue: SCREEN_WIDTH,
+      duration: 460,
+      easing: Easing.in(Easing.cubic),
+      useNativeDriver: true,
+    }).start(({ finished }) => {
+      if (finished) setCartVisible(false);
+    });
   };
 
   const openChecklist = async (idea: string) => {
@@ -295,7 +284,7 @@ function VoiceAssessmentScreenInner({
       const balance = wallets.reduce((sum, wallet) => sum + Number(wallet.balance || 0), 0);
       const total = Number(cart?.total_price || cart?.total || cart?.cart_total || 0);
       if (total > 0 && balance < total) {
-        showAlert(`Insufficient wallet balance. Available: ${balance.toFixed(2)}.`);
+        showAlert(`Insufficient wallet balance. Available: ${formatMoney(balance)}.`);
         return;
       }
       const result = await checkoutWithWallet({ address: address.trim(), mobile: mobile.trim(), status: true });
@@ -307,22 +296,30 @@ function VoiceAssessmentScreenInner({
     }
   };
 
+  // FIX: openCart now resets the drawer offscreen and animates it in,
+  // the same way chooseDesign() does. Previously it only set state,
+  // so tapping the header cart icon showed the modal with the drawer
+  // stuck at its last transform value (usually fully off-screen).
+  const openCart = async () => {
+    setCart(null);
+    setCartLoading(true);
+    setCartVisible(true);
+    slideCartIn();
+
+    try {
+      const currentCart = await viewCart();
+      setCart(currentCart.data);
+    } catch (error) {
+      showAlert(error instanceof Error ? error.message : 'Could not load your cart.');
+    } finally {
+      setCartLoading(false);
+    }
+  };
+
   const animation = useRef(new Animated.Value(0)).current;
-
-  // Ref into the orb so real-time audio level updates can be pushed
-  // directly to it every animation frame, bypassing React state/props
-  // (which would re-render the whole screen dozens of times a second).
   const orbRef = useRef<VoiceOrbHandle>(null);
-
-  // Prevents a second session from being started while one is already
-  // starting/connected — this is what stops sessions from stacking up
-  // (and quietly burning credits) across Fast Refresh reloads or repeated
-  // mic-button taps.
   const hasStartedRef = useRef(false);
 
-  // Requests Android's RECORD_AUDIO runtime permission. iOS prompts
-  // automatically on first capture using the NSMicrophoneUsageDescription
-  // string already set in app.json, so nothing extra is needed there.
   const requestMicPermission = async () => {
     if (Platform.OS !== 'android') {
       return true;
@@ -337,19 +334,6 @@ function VoiceAssessmentScreenInner({
     );
     return granted === PermissionsAndroid.RESULTS.GRANTED;
   };
-
-  /*
-   * ---------------------------------------------------------
-   * VOICE CONVERSATION — @elevenlabs/react-native
-   * ---------------------------------------------------------
-   *
-   * conversation.status: 'connecting' | 'connected' | 'disconnected'
-   * conversation.isSpeaking: whether the agent is currently talking
-   *
-   * The session is always-on: it starts the moment this screen mounts,
-   * and stays open (listening) until the mic button is pressed to pause
-   * it, the screen is left, or the idle timer closes it.
-   */
 
   const conversation = useConversation();
   const { status, isSpeaking } = conversation;
@@ -374,27 +358,14 @@ function VoiceAssessmentScreenInner({
   }, [clearIdleTimer, conversation, isConnected]);
 
   const resetIdleTimer = useCallback(() => {
-    // Keep the voice session open until the user explicitly pauses it or
-    // leaves the screen. This avoids disconnecting while ElevenLabs is still
-    // processing a quiet pause in the conversation.
     clearIdleTimer();
   }, [clearIdleTimer]);
 
-  // ---------------------------------------------------------
-  // AUDIO-REACTIVE ORB
-  // ---------------------------------------------------------
-  // Every animation frame while the agent is speaking, read its real,
-  // live output volume and push it straight into the orb via the ref
-  // above. This is what makes the orb actually react to what the AI is
-  // saying, instead of playing a generic canned animation.
   useEffect(() => {
     let rafId: number;
 
     const tick = () => {
       if (isSpeaking) {
-        // getOutputVolume() returns the agent's current output volume,
-        // 0 (silent) to 1 (loudest) — verify this against the current
-        // @elevenlabs/react-native API reference if it doesn't resolve.
         const volume = conversation.getOutputVolume?.() ?? 0;
         orbRef.current?.setAudioLevel(volume);
       } else {
@@ -412,8 +383,6 @@ function VoiceAssessmentScreenInner({
 
   const startListening = useCallback(async () => {
     if (hasStartedRef.current) {
-      // Already starting or connected — never open a second session on
-      // top of it. This is the fix for sessions stacking up.
       return;
     }
     hasStartedRef.current = true;
@@ -436,9 +405,6 @@ function VoiceAssessmentScreenInner({
         ...(typeof credential === 'string' ? { conversationToken: credential } : { agentId: credential.agent_id }),
         userId: `apsuni-${authUserId}`,
         dynamicVariables: { apsuni_user_id: String(authUserId) },
-        // Dynamic variables personalize the agent, while this explicit body
-        // is forwarded by ElevenLabs to the Custom LLM request. Django uses
-        // it to select and debit the authenticated Apsuni wallet.
         customLlmExtraBody: {
           apsuni_user_id: String(authUserId),
           user_id: `apsuni-${authUserId}`,
@@ -448,11 +414,9 @@ function VoiceAssessmentScreenInner({
         },
         onDisconnect: () => {
           clearIdleTimer();
-          // Allow starting again after a real disconnect.
           hasStartedRef.current = false;
           setIsStartingVoice(false);
         },
-        // Agent's spoken reply, as text.
         onMessage: (message: any) => {
           resetIdleTimer();
           setIsWaitingForReply(false);
@@ -469,8 +433,6 @@ function VoiceAssessmentScreenInner({
               },
             ]);
             if (role === 'user' && designCategoryFromPrompt(text)) {
-              // Voice transcripts that request a website/app also go through
-              // the backend before the design picker is opened.
               sendAssistantMessageRealtime(text, conversationId)
                 .then((result) => {
                   setConversationId(result.conversation_id);
@@ -504,8 +466,6 @@ function VoiceAssessmentScreenInner({
     }
   }, [conversation, resetIdleTimer, clearIdleTimer, showAlert]);
 
-  // Chat is the default mode. ElevenLabs starts only when the user presses
-  // the voice button, which avoids opening a billable session on screen load.
   useEffect(() => {
     return () => {
       clearIdleTimer();
@@ -513,18 +473,8 @@ function VoiceAssessmentScreenInner({
       closeRestAISocket();
       hasStartedRef.current = false;
     };
-    // The cleanup intentionally runs once when this screen unmounts.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
-  /*
-   * ---------------------------------------------------------
-   * MICROPHONE — now doubles as the pause/resume control
-   * ---------------------------------------------------------
-   *
-   * Pressing it actually ends the session (not just mutes it) — that's
-   * what stops the per-minute billing clock. Pressing it again resumes.
-   */
 
   const handleMicPress = () => {
     if (isConnected) {
@@ -535,19 +485,11 @@ function VoiceAssessmentScreenInner({
     onMicPress?.();
   };
 
-  /*
-   * ---------------------------------------------------------
-   * SEND PROMPT (typed text, sent into the same live session)
-   * ---------------------------------------------------------
-   */
-
   const sendPromptAndReply = async (prompt: string) => {
     if (!prompt.trim()) {
       return;
     }
 
-    // Typed chat uses only /assistant/message/ -> backend -> Claude. Never
-    // send typed chat into the ElevenLabs session, and pause voice first.
     pauseVoiceSession();
     onSendPrompt?.(prompt);
 
@@ -600,12 +542,6 @@ function VoiceAssessmentScreenInner({
     sendPromptAndReply(prompt);
   };
 
-  /*
-   * ---------------------------------------------------------
-   * BOTTOM SHEET
-   * ---------------------------------------------------------
-   */
-
   const toggleSheet = () => {
     const toValue = isExpanded ? 0 : 1;
 
@@ -647,28 +583,11 @@ function VoiceAssessmentScreenInner({
 
       <SafeAreaView style={styles.safeArea}>
         {/* HEADER */}
-        <View style={styles.header}>
-          <BackButton onBack={onBack} />
-
-          <Text style={styles.headerTitle}>
-            Agent
-          </Text>
-
-          <TouchableOpacity
-            activeOpacity={0.85}
-            onPress={() => router.push('/Screen/Premium-Screen/PremiumScreen')}
-          >
-            <LinearGradient
-              colors={['#2563EB', '#3B82F6', '#60A5FA']}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 0 }}
-              style={styles.proPill}
-            >
-              <FontAwesome5 name="crown" size={12} color="#FBBF24" style={{ marginRight: 6 }} />
-              <Text style={styles.proText}>Pro</Text>
-            </LinearGradient>
-          </TouchableOpacity>
-        </View>
+        <AppHeader
+          onBack={onBack}
+          onCart={openCart}
+          onNotification={() => showAlert('You have no new notifications.')}
+        />
 
         {/* MAIN CONTENT */}
         <View style={styles.contentContainer}>
@@ -1128,14 +1047,51 @@ function VoiceAssessmentScreenInner({
         </View></View>
       </Modal>
 
-      <Modal visible={cartVisible} animationType="slide" transparent onRequestClose={() => setCartVisible(false)}>
-        <View style={styles.modalBackdrop}><View style={styles.modalCard}>
-          <View style={styles.modalHeader}><Text style={styles.modalTitle}>Project cart</Text><TouchableOpacity onPress={() => setCartVisible(false)}><Feather name="x" size={22} color="#64748B" /></TouchableOpacity></View>
-          <Text style={styles.modalSubtitle}>Review your project before wallet checkout.</Text>
-          <TextInput value={address} onChangeText={setAddress} placeholder="Delivery address" placeholderTextColor="#94A3B8" style={styles.modalInput} />
-          <TextInput value={mobile} onChangeText={setMobile} placeholder="Mobile number" placeholderTextColor="#94A3B8" style={styles.modalInput} keyboardType="phone-pad" />
-          <TouchableOpacity style={styles.searchButton} onPress={payFromWallet}><Text style={styles.searchButtonText}>Pay with wallet</Text></TouchableOpacity>
-        </View></View>
+      <Modal visible={cartVisible} animationType="none" transparent onRequestClose={closeCart}>
+        <View style={styles.cartDrawerBackdrop}>
+          <Pressable style={StyleSheet.absoluteFill} onPress={closeCart} />
+          <Animated.View style={[styles.cartDrawer, { transform: [{ translateX: cartDrawerX }] }]}>
+            <View style={styles.cartDrawerHeader}>
+              <TouchableOpacity accessibilityLabel="Close cart" onPress={closeCart} style={styles.cartCloseButton}>
+                <Feather name="x" size={22} color="#CBD5E1" />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView contentContainerStyle={styles.cartItems} showsVerticalScrollIndicator={false}>
+              {cartLoading ? (
+                <View style={styles.cartLoadingState}>
+                  <ActivityIndicator size="large" color="#86EFAC" />
+                  <Text style={styles.cartLoadingText}>Loading your cart...</Text>
+                </View>
+              ) : getCartItems(cart).length === 0 ? (
+                <View style={styles.emptyCart}>
+                  <Feather name="shopping-cart" size={30} color="#64748B" />
+                  <Text style={styles.emptyCartText}>Your cart is empty.</Text>
+                </View>
+              ) : getCartItems(cart).map((item, index) => (
+                <View key={String(item.id ?? item.product_id ?? index)} style={styles.cartItem}>
+                  <View style={styles.cartItemIcon}><Feather name="file-text" size={19} color="#86EFAC" /></View>
+                  <View style={styles.cartItemInfo}>
+                    <Text numberOfLines={2} style={styles.cartItemName}>{getCartItemName(item, index)}</Text>
+                    <Text style={styles.cartItemMeta}>Quantity: {item.quantity ?? 1}</Text>
+                  </View>
+                  <Text style={styles.cartItemPrice}>{formatMoney(item.price ?? item.total ?? 0)}</Text>
+                </View>
+              ))}
+            </ScrollView>
+
+            <View style={styles.cartCheckoutSection}>
+              <View style={styles.cartTotalRow}>
+                <Text style={styles.cartTotalLabel}>Total</Text>
+                <Text style={styles.cartTotal}>{formatMoney(cart?.total_price ?? cart?.total ?? cart?.cart_total ?? 0)}</Text>
+              </View>
+              <TouchableOpacity style={styles.checkoutButton} onPress={payFromWallet} activeOpacity={0.85}>
+                <Text style={styles.checkoutButtonText}>Checkout</Text>
+                <Feather name="arrow-right" size={18} color="#052E16" />
+              </TouchableOpacity>
+            </View>
+          </Animated.View>
+        </View>
       </Modal>
 
       <Modal visible={settingsVisible} animationType="fade" transparent onRequestClose={() => setSettingsVisible(false)}>
@@ -1197,6 +1153,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingTop: 40,
     paddingBottom: 12,
+    zIndex: 10,
+  },
+
+  headerTitleGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
   },
 
   headerTitle: {
@@ -1205,6 +1168,116 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     justifyContent:"center",
     textAlign:"center",
+  },
+
+  headerLeftActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+
+  headerRightActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+
+  headerIconButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+  },
+
+  walletControl: {
+    position: 'relative',
+    flexDirection: 'row',
+    alignItems: 'center',
+    right: -10,
+  },
+
+  walletDropdownButton: {
+    width: 20,
+    height: 36,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  walletIconButton: {
+    width: 'auto',
+    minWidth: 36,
+    flexDirection: 'row',
+    paddingHorizontal: 9,
+  },
+
+  selectedWalletAmount: {
+    maxWidth: 64,
+    marginLeft: 4,
+    color: '#BFDBFE',
+    fontSize: 11,
+    fontWeight: '700',
+  },
+
+  walletDropdown: {
+    position: 'absolute',
+    top: 44,
+    left: 0,
+    width: 100,
+    maxHeight: 260,
+    padding: 12,
+    borderRadius: 14,
+    backgroundColor: '#132033',
+    borderWidth: 1,
+    borderColor: 'rgba(96, 165, 250, 0.35)',
+    shadowColor: '#000000',
+    shadowOpacity: 0.3,
+    shadowRadius: 12,
+    elevation: 8,
+    zIndex: 20,
+  },
+
+  walletDropdownTitle: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '700',
+    marginBottom: 8,
+  },
+
+  walletLoader: {
+    marginVertical: 14,
+  },
+
+  walletEmptyText: {
+    color: '#94A3B8',
+    fontSize: 13,
+    paddingVertical: 8,
+  },
+
+  walletRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 10,
+    paddingHorizontal: 8,
+    borderRadius: 8,
+  },
+
+  walletRowSelected: {
+    backgroundColor: 'rgba(37, 99, 235, 0.25)',
+  },
+
+  walletName: {
+    color: '#F8FAFC',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+
+  walletBalance: {
+    color: '#94A3B8',
+    fontSize: 12,
+    marginTop: 2,
   },
 
   headerSpacer: {
@@ -1592,6 +1665,92 @@ const styles = StyleSheet.create({
   modalInput: { borderWidth: 1, borderColor: '#E2E8F0', borderRadius: 12, color: '#0F172A', paddingHorizontal: 13, paddingVertical: 11, marginBottom: 9 },
   searchButton: { backgroundColor: '#2563EB', borderRadius: 12, alignItems: 'center', justifyContent: 'center', minHeight: 44, marginBottom: 12 },
   searchButtonText: { color: '#FFFFFF', fontSize: 14, fontWeight: '700' },
+  cartDrawerBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(2, 6, 23, 0.68)',
+    alignItems: 'flex-end',
+  },
+  cartDrawer: {
+    width: '70%',
+    maxWidth: 390,
+    height: '95%',
+    backgroundColor: '#0F1B2D',
+    paddingTop: Platform.OS === 'ios' ? 56 : 28,
+  },
+  cartDrawerHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingBottom: 18,
+    borderBottomWidth: 1,
+    borderBottomColor: '#26364E',
+  },
+  cartDrawerTitle: { color: '#FFFFFF', fontSize: 21, fontWeight: '800' },
+  cartDrawerSubtitle: { color: '#94A3B8', fontSize: 12, marginTop: 3 },
+  cartCloseButton: {
+    width: 36,
+    height: 36,
+    top: 5,
+    right: -190,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#1E2E45',
+  },
+  cartItems: { padding: 16, gap: 10, flexGrow: 1 },
+  cartLoadingState: { flex: 1, minHeight: 190, alignItems: 'center', justifyContent: 'center', gap: 12 },
+  cartLoadingText: { color: '#CBD5E1', fontSize: 14 },
+  emptyCart: { flex: 1, minHeight: 190, alignItems: 'center', justifyContent: 'center', gap: 10 },
+  emptyCartText: { color: '#94A3B8', fontSize: 14 },
+  cartItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 12,
+    borderRadius: 14,
+    backgroundColor: '#17263B',
+    gap: 10,
+  },
+  cartItemIcon: {
+    width: 38,
+    height: 38,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#153526',
+  },
+  cartItemInfo: { flex: 1 },
+  cartItemName: { color: '#F8FAFC', fontSize: 13, fontWeight: '700' },
+  cartItemMeta: { color: '#94A3B8', fontSize: 11, marginTop: 3 },
+  cartItemPrice: { color: '#86EFAC', fontSize: 13, fontWeight: '700' },
+  cartCheckoutSection: {
+    padding: 16,
+    borderTopWidth: 1,
+    borderTopColor: '#26364E',
+    backgroundColor: '#112036',
+  },
+  cartInput: {
+    borderWidth: 1,
+    borderColor: '#334155',
+    borderRadius: 10,
+    color: '#FFFFFF',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    marginBottom: 8,
+  },
+  cartTotalRow: { flexDirection: 'row', justifyContent: 'space-between', marginVertical: 10 },
+  cartTotalLabel: { color: '#CBD5E1', fontSize: 15, fontWeight: '700' },
+  cartTotal: { color: '#FFFFFF', fontSize: 16, fontWeight: '800' },
+  checkoutButton: {
+    minHeight: 50,
+    borderRadius: 12,
+    backgroundColor: '#86EFAC',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  checkoutButtonText: { color: '#052E16', fontSize: 15, fontWeight: '800' },
   emptyText: { textAlign: 'center', color: '#64748B', paddingVertical: 25 },
   settingsBackdrop: { flex: 1, backgroundColor: 'rgba(2, 6, 23, 0.35)', alignItems: 'center', justifyContent: 'center', padding: 24 },
   settingsCard: { width: '100%', maxWidth: 320, backgroundColor: '#FFFFFF', borderRadius: 22, padding: 16, shadowColor: '#000', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.2, shadowRadius: 18, elevation: 12 },

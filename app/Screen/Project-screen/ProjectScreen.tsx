@@ -10,43 +10,15 @@ import {
   SafeAreaView,
   StatusBar,
   Dimensions,
+  TextInput,
 } from 'react-native';
-import { Feather } from '@expo/vector-icons';
+import { Feather, FontAwesome5 } from '@expo/vector-icons';
 import CustomTabBar from '../../components/CustomTabBar';
-import BackButton from '../../components/BackButton';
-import { getAccessToken, getApiAssetUrl, listProjects, Project } from '../../services/api';
+import AppHeader from '../../components/AppHeader';
+import AppBackground from '../../components/AppBackground';
+import { getAccessToken, getApiAssetUrl, listProjects, listTeams, Project, Team, TeamMember } from '../../services/api';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
-
-// --- Mock Data ---
-const TEAMS_DATA = [
-  {
-    id: 'add',
-    name: 'New Team',
-    isAdd: true,
-  },
-  {
-    id: '1',
-    name: 'Chelsea FC',
-    logo: 'https://images.unsplash.com/photo-1508098682722-e99c43a406b2?q=80&w=300&auto=format&fit=crop',
-    active: true,
-  },
-  {
-    id: '2',
-    name: 'UI/UX Design',
-    logo: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?q=80&w=300&auto=format&fit=crop',
-  },
-  {
-    id: '3',
-    name: 'Dev Engineering',
-    logo: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?q=80&w=300&auto=format&fit=crop',
-  },
-  {
-    id: '4',
-    name: 'Marketing',
-    logo: 'https://images.unsplash.com/photo-1517841905240-472988babdf9?q=80&w=300&auto=format&fit=crop',
-  },
-];
 
 export default function ProjectsFeedScreen() {
   const [viewMode, setViewMode] = useState<'list' | 'grid'>('list');
@@ -54,12 +26,18 @@ export default function ProjectsFeedScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  const [teams, setTeams] = useState<Team[]>([]);
+  const [teamsError, setTeamsError] = useState<string | null>(null);
+  const [activeMemberId, setActiveMemberId] = useState<number | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
+
   useEffect(() => {
     let isMounted = true;
 
     if (!getAccessToken()) {
       setError('Please sign in to view your projects.');
       setIsLoading(false);
+      setTeamsError('Please sign in to view your teams.');
       return () => {
         isMounted = false;
       };
@@ -76,26 +54,60 @@ export default function ProjectsFeedScreen() {
         if (isMounted) setIsLoading(false);
       });
 
+    listTeams()
+      .then((response) => {
+        if (isMounted) setTeams(response ?? []);
+      })
+      .catch((requestError) => {
+        if (isMounted) setTeamsError(requestError instanceof Error ? requestError.message : 'Unable to load teams.');
+      });
+
     return () => {
       isMounted = false;
     };
   }, []);
 
+  // Flatten every member across all of the user's teams into one list,
+  // de-duplicated by member id (a person can be on more than one team).
+  const teamMembers: TeamMember[] = React.useMemo(() => {
+    const seen = new Map<number, TeamMember>();
+    teams.forEach((team) => {
+      (team.members ?? []).forEach((member) => {
+        if (!seen.has(member.id)) seen.set(member.id, member);
+      });
+    });
+    return Array.from(seen.values());
+  }, [teams]);
+
+  const filteredProjects = React.useMemo(() => {
+    const query = searchQuery.trim().toLowerCase();
+    if (!query) return projects;
+
+    return projects.filter((project) => {
+      const searchableText = [
+        project.id,
+        project.name,
+        project.description,
+        project.logo,
+        project.created_at,
+        ...(project.team_members ?? []).flatMap((member) => [member.id, member.username, member.full_name, member.profile_image]),
+      ]
+        .filter((value) => value !== null && value !== undefined)
+        .join(' ')
+        .toLowerCase();
+
+      return searchableText.includes(query);
+    });
+  }, [projects, searchQuery]);
+
   return (
     <>
+      <AppBackground />
+
       <SafeAreaView style={styles.container}>
         <StatusBar barStyle="light-content" backgroundColor="#000000" />
 
-      {/* --- TOP HEADER --- */}
-      <View style={styles.header}>
-        <BackButton />
-
-        <TouchableOpacity style={styles.headerTitleContainer}>
-          <Text style={styles.headerTitle}>Projects</Text>
-          <Feather name="chevron-down" size={18} color="#FFFFFF" />
-        </TouchableOpacity>
-
-      </View>
+      <AppHeader/>
 
       <ScrollView
         showsVerticalScrollIndicator={false}
@@ -105,41 +117,74 @@ export default function ProjectsFeedScreen() {
         <View style={styles.teamsSection}>
           <View style={styles.teamsHeader}>
             <View style={styles.teamsTitleGroup}>
-              <Feather name="users" size={18} color="#FFFFFF" />
+              <Feather name="user" size={22} color="#FFFFFF" />
               <Text style={styles.teamsTitle}>My Teams</Text>
             </View>
           </View>
 
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.teamsScroll}>
-            {TEAMS_DATA.map((team) => {
-              if (team.isAdd) {
-                return (
-                  <View key={team.id} style={styles.teamItem}>
-                    <TouchableOpacity style={styles.addTeamCircle}>
-                      <Feather name="plus" size={22} color="#FFFFFF" />
-                    </TouchableOpacity>
-                    <Text style={styles.teamNameText} numberOfLines={1}>
-                      {team.name}
-                    </Text>
-                  </View>
-                );
-              }
+            <View style={styles.teamItem}>
+              <TouchableOpacity style={styles.addTeamCircle}>
+                <Feather name="plus" size={22} color="#FFFFFF" />
+              </TouchableOpacity>
+              <Text style={styles.teamNameText} numberOfLines={1}>
+                New Team
+              </Text>
+            </View>
+
+            {teamMembers.map((member) => {
+              const memberAvatarUrl = member.profile_image ? getApiAssetUrl(member.profile_image) : null;
+              const displayName = member.full_name || member.username;
+              const initials = displayName.trim().slice(0, 2).toUpperCase();
+              const isActive = member.id === activeMemberId;
 
               return (
-                <TouchableOpacity key={team.id} style={styles.teamItem}>
-                  <View style={[styles.avatarGradientRing, team.active && styles.activeRing]}>
-                    <Image source={{ uri: team.logo }} style={styles.teamAvatarImg} />
+                <TouchableOpacity
+                  key={member.id}
+                  style={styles.teamItem}
+                  onPress={() => setActiveMemberId(member.id)}
+                >
+                  <View style={[styles.avatarGradientRing, isActive && styles.activeRing]}>
+                    {memberAvatarUrl ? (
+                      <Image source={{ uri: memberAvatarUrl }} style={styles.teamAvatarImg} />
+                    ) : (
+                      <View style={styles.teamInitialsCircle}>
+                        <Text style={styles.teamInitialsText}>{initials}</Text>
+                      </View>
+                    )}
                   </View>
                   <Text style={styles.teamNameText} numberOfLines={1}>
-                    {team.name}
+                    {displayName}
                   </Text>
                 </TouchableOpacity>
               );
             })}
           </ScrollView>
 
+          {teamsError && teamMembers.length === 0 && (
+            <Text style={styles.teamsErrorText}>{teamsError}</Text>
+          )}
+
+          <View style={styles.projectSearchContainer}>
+            <Feather name="search" size={17} color="#64748B" />
+            <TextInput
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+              placeholder="Search projects"
+              placeholderTextColor="#64748B"
+              style={styles.projectSearchInput}
+              autoCapitalize="none"
+              returnKeyType="search"
+            />
+            {searchQuery.length > 0 && (
+              <TouchableOpacity onPress={() => setSearchQuery('')} activeOpacity={0.7} accessibilityLabel="Clear project search">
+                <Feather name="x-circle" size={17} color="#94A3B8" />
+              </TouchableOpacity>
+            )}
+          </View>
+
           {/* View Mode Switchers: List & Column/Grid */}
-          <View style={styles.teamsViewToggleRow}>
+          {/* <View style={styles.teamsViewToggleRow}>
             <View style={styles.viewToggleGroup}>
               <TouchableOpacity
                 style={[styles.toggleBtn, viewMode === 'list' && styles.activeToggle]}
@@ -163,7 +208,7 @@ export default function ProjectsFeedScreen() {
                 />
               </TouchableOpacity>
             </View>
-          </View>
+          </View> */}
         </View>
 
         <View style={styles.divider} />
@@ -178,25 +223,23 @@ export default function ProjectsFeedScreen() {
           <View style={styles.stateContainer}>
             <Text style={styles.stateText}>{error}</Text>
           </View>
-        ) : projects.length === 0 ? (
+        ) : filteredProjects.length === 0 ? (
           <View style={styles.stateContainer}>
-            <Text style={styles.stateText}>No projects found.</Text>
+            <Text style={styles.stateText}>{searchQuery.trim() ? 'No matching projects found.' : 'No projects found.'}</Text>
           </View>
         ) : viewMode === 'list' ? (
           /* LIST VIEW FEED */
-          projects.map((project) => {
+          filteredProjects.map((project) => {
             const imageUrl = getApiAssetUrl(project.logo);
             const description = project.description?.replace(/<[^>]*>/g, '').trim() || 'No description available.';
             const assignedTeams = project.team_members?.map((member) => member.full_name || member.username).join(', ') || 'Unassigned';
+            const projectTeamMembers = project.team_members ?? [];
+            const visibleMembers = projectTeamMembers.slice(0, 4);
+            const extraMembersCount = projectTeamMembers.length - visibleMembers.length;
 
             return (
             <View key={project.id} style={styles.projectCard}>
               {/* Project Image */}
-              <Image
-                source={require('../../../assets/images/tabs-icon/File recover.gif')}
-                style={styles.projectImage}
-                resizeMode="cover"
-              />
 
               {/* Project Profile */}
               <View style={styles.projectProfileRow}>
@@ -204,8 +247,7 @@ export default function ProjectsFeedScreen() {
                   {imageUrl && <Image source={{ uri: imageUrl }} style={styles.profileAvatar} />}
                 </View>
                 <View style={styles.profileTextGroup}>
-                  <Text style={styles.profileName}>Teams</Text>
-                  <Text style={styles.profileSubtitle}>{assignedTeams}</Text>
+                  <Text style={styles.profileName}>{project.name}</Text>
                 </View>
               </View>
 
@@ -217,9 +259,56 @@ export default function ProjectsFeedScreen() {
                   {description}
                 </Text>
 
-                <Text style={styles.timeAgoText}>
-                  {project.created_at ? new Date(project.created_at).toLocaleDateString() : ''}
-                </Text>
+                {projectTeamMembers.length > 0 && (
+                  <View style={styles.assignedRow}>
+                    <Text style={styles.assignedToLabel}>Assigned to</Text>
+                    <View style={styles.avatarStackRow}>
+                      {visibleMembers.map((member, index) => {
+                        const memberAvatarUrl = member.profile_image ? getApiAssetUrl(member.profile_image) : null;
+                        const initials = (member.full_name || member.username || '?')
+                          .trim()
+                          .slice(0, 2)
+                          .toUpperCase();
+
+                        return (
+                          <View
+                            key={member.id ?? `${project.id}-member-${index}`}
+                            style={[
+                              styles.avatarStackItem,
+                              index > 0 && styles.avatarStackOverlap,
+                              { zIndex: visibleMembers.length - index },
+                            ]}
+                          >
+                            {memberAvatarUrl ? (
+                              <Image source={{ uri: memberAvatarUrl }} style={styles.avatarStackImg} />
+                            ) : (
+                              <View style={styles.avatarStackFallback}>
+                                <Text style={styles.avatarStackInitials}>{initials}</Text>
+                              </View>
+                            )}
+                          </View>
+                        );
+                      })}
+
+                      {extraMembersCount > 0 && (
+                        <View
+                          style={[
+                            styles.avatarStackItem,
+                            styles.avatarStackOverlap,
+                            styles.avatarStackMore,
+                            { zIndex: 0 },
+                          ]}
+                        >
+                          <Text style={styles.avatarStackMoreText}>+{extraMembersCount}</Text>
+                          
+                        </View>
+                      )}
+                      <Text style={styles.timeAgoText}>
+                        {project.created_at ? new Date(project.created_at).toLocaleDateString() : ''}
+                      </Text>
+                    </View>
+                  </View>
+                )}
               </View>
             </View>
             );
@@ -227,7 +316,7 @@ export default function ProjectsFeedScreen() {
         ) : (
           /* GRID / COLUMN VIEW */
           <View style={styles.gridContainer}>
-            {projects.map((project) => (
+            {filteredProjects.map((project) => (
               <TouchableOpacity key={project.id} style={styles.gridCard} activeOpacity={0.8}>
                 <Image source={{ uri: getApiAssetUrl(project.logo) ?? '' }} style={styles.gridImage} />
                 <View style={styles.gridOverlay}>
@@ -253,7 +342,7 @@ export default function ProjectsFeedScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#000000',
+    backgroundColor: 'transparent',
   },
   scrollContent: {
     paddingBottom: 132,
@@ -337,6 +426,31 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     gap: 16,
   },
+  teamsErrorText: {
+    color: '#94A3B8',
+    fontSize: 11,
+    paddingHorizontal: 14,
+    paddingTop: 6,
+  },
+  projectSearchContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    minHeight: 44,
+    marginTop: 14,
+    marginHorizontal: 14,
+    paddingHorizontal: 12,
+    borderRadius: 11,
+    backgroundColor: '#0F172A',
+    borderWidth: 1,
+    borderColor: '#24334A',
+  },
+  projectSearchInput: {
+    flex: 1,
+    color: '#FFFFFF',
+    fontSize: 13,
+    marginLeft: 9,
+    paddingVertical: 0,
+  },
   teamItem: {
     alignItems: 'center',
     width: 72,
@@ -358,6 +472,19 @@ const styles = StyleSheet.create({
     width: '100%',
     height: '100%',
     borderRadius: 30,
+  },
+  teamInitialsCircle: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 30,
+    backgroundColor: '#7C3AED',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  teamInitialsText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '700',
   },
   addTeamCircle: {
     width: 64,
@@ -518,6 +645,61 @@ const styles = StyleSheet.create({
     color: '#475569',
     fontSize: 10,
     textTransform: 'uppercase',
+    right: -100,
+  },
+
+  /* --- Avatar Stack (team members) --- */
+  assignedRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  assignedToLabel: {
+    color: '#94A3B8',
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  avatarStackRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  avatarStackItem: {
+    width: 25,
+    height: 25,
+    borderRadius: 16,
+    borderWidth: 2,
+    borderColor: '#000000',
+    overflow: 'hidden',
+    backgroundColor: '#1E293B',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  avatarStackOverlap: {
+    marginLeft: -12,
+  },
+  avatarStackImg: {
+    width: '100%',
+    height: '100%',
+  },
+  avatarStackFallback: {
+    width: '100%',
+    height: '100%',
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#7C3AED',
+  },
+  avatarStackInitials: {
+    color: '#FFFFFF',
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  avatarStackMore: {
+    backgroundColor: '#E2E8F0',
+  },
+  avatarStackMoreText: {
+    color: '#0F172A',
+    fontSize: 11,
+    fontWeight: '700',
   },
 
   /* --- Grid / Column Styling --- */
