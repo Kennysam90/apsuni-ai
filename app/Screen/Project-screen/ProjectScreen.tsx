@@ -18,6 +18,7 @@ import AppHeader from '../../components/AppHeader';
 import AppBackground from '../../components/AppBackground';
 import { getAccessToken, getApiAssetUrl, listProjects, listTeams, Project, Team, TeamMember } from '../../services/api';
 
+import { friendlyError } from '../../services/errors';
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 export default function ProjectsFeedScreen() {
@@ -48,7 +49,7 @@ export default function ProjectsFeedScreen() {
         if (isMounted) setProjects(response.projects ?? []);
       })
       .catch((requestError) => {
-        if (isMounted) setError(requestError instanceof Error ? requestError.message : 'Unable to load projects.');
+        if (isMounted) setError(friendlyError(requestError, 'Unable to load projects.'));
       })
       .finally(() => {
         if (isMounted) setIsLoading(false);
@@ -59,7 +60,7 @@ export default function ProjectsFeedScreen() {
         if (isMounted) setTeams(response ?? []);
       })
       .catch((requestError) => {
-        if (isMounted) setTeamsError(requestError instanceof Error ? requestError.message : 'Unable to load teams.');
+        if (isMounted) setTeamsError(friendlyError(requestError, 'Unable to load teams.'));
       });
 
     return () => {

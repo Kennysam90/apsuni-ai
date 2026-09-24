@@ -21,6 +21,7 @@ import {
 import AppHeader from '@/app/components/AppHeader';
 import { formatMoney, useCurrency } from '../../services/currency';
 
+import { friendlyError } from '../../services/errors';
 type TimelineStep = {
 	label: string;
 	timestamp?: string;
@@ -124,7 +125,7 @@ export default function OrderDetailsScreen() {
 				if (isMounted) setProducts(response.products ?? []);
 			})
 			.catch((requestError) => {
-				if (isMounted) setError(requestError instanceof Error ? requestError.message : 'Unable to load this order.');
+				if (isMounted) setError(friendlyError(requestError, 'Unable to load this order.'));
 			})
 			.finally(() => {
 				if (isMounted) setIsLoading(false);

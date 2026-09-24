@@ -15,6 +15,7 @@ import { Feather } from '@expo/vector-icons';
 import BackButton from '../../components/BackButton';
 import { useAppAlert } from '../../components/AppAlert';
 
+import { friendlyError } from '../../services/errors';
 interface Plan {
   id: string;
   title: string;
@@ -112,7 +113,7 @@ export default function PremiumScreen({
     try {
       await onSubscribe(selectedPlan.id);
     } catch (error) {
-      showAlert(error instanceof Error ? error.message : 'Subscription could not be started.');
+      showAlert(friendlyError(error, 'Subscription could not be started.'));
     } finally {
       setIsSubmitting(false);
     }

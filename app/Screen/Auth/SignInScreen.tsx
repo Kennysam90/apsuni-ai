@@ -5,13 +5,14 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
+  Image,
   ScrollView,
   SafeAreaView,
   StatusBar,
   KeyboardAvoidingView,
   Platform,
 } from 'react-native';
-import { Ionicons, FontAwesome5, Octicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import { Ionicons, FontAwesome5, Octicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import BackButton from '../../components/BackButton';
 import AnimatedAuroraBackground from '../../components/AnimatedAuroraBackground';
@@ -19,6 +20,7 @@ import { login } from '../../services/api';
 import LoadingButton from '../../components/LoadingButton';
 import { useAppAlert } from '../../components/AppAlert';
 
+import { friendlyError } from '../../services/errors';
 export default function SignInScreen() {
   const router = useRouter();
   const [email, setEmail] = useState('');
@@ -40,7 +42,7 @@ export default function SignInScreen() {
       await login(email.trim(), password);
       router.replace('/(tabs)');
     } catch (requestError) {
-      const message = requestError instanceof Error ? requestError.message : 'Unable to sign in.';
+      const message = friendlyError(requestError, 'Unable to sign in.');
       setError(message);
       showAlert({ title: 'Sign in failed', message });
     } finally {
@@ -63,8 +65,8 @@ export default function SignInScreen() {
 
             {/* Logo */}
             <View style={styles.logoRow}>
-              <View style={styles.logoMark}><MaterialCommunityIcons name="atom" size={20} color="#93C5FD" /></View>
-              <Text style={styles.logoText}>Apsuni AI</Text>
+              <View style={styles.logoMark}><Image source={require('../../../assets/images/AL3.png')} style={styles.logoImage} resizeMode="contain" /></View>
+              <Text style={styles.logoText}>Apsuni</Text>
             </View>
 
             <Text style={styles.title}>Welcome to Apsuni</Text>
@@ -76,11 +78,11 @@ export default function SignInScreen() {
             <View style={styles.formCard}>
               {/* Social Logins */}
               <View style={styles.socialRow}>
-                <TouchableOpacity style={styles.socialPill} activeOpacity={0.8}>
+                <TouchableOpacity style={[styles.socialPill, styles.socialDisabled]} activeOpacity={1} disabled accessibilityState={{ disabled: true }}>
                   <FontAwesome5 name="google" size={16} color="#FFFFFF" />
                   <Text style={styles.socialText}>Google</Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={styles.socialPill} activeOpacity={0.8}>
+                <TouchableOpacity style={[styles.socialPill, styles.socialDisabled]} activeOpacity={1} disabled accessibilityState={{ disabled: true }}>
                   <FontAwesome5 name="apple" size={18} color="#FFFFFF" />
                   <Text style={styles.socialText}>Apple</Text>
                 </TouchableOpacity>
@@ -133,7 +135,7 @@ export default function SignInScreen() {
                   </View>
                   <Text style={styles.rememberText}>Remember me</Text>
                 </TouchableOpacity>
-                <TouchableOpacity>
+                <TouchableOpacity onPress={() => router.push('/Screen/Auth/ForgotPasswordScreen')} hitSlop={8}>
                   <Text style={styles.forgotText}>Forgot Password?</Text>
                 </TouchableOpacity>
               </View>
@@ -176,16 +178,8 @@ const styles = StyleSheet.create({
     gap: 8,
     marginTop: 6,
   },
-  logoMark: {
-    width: 34,
-    height: 34,
-    borderRadius: 12,
-    backgroundColor: 'rgba(96,165,250,0.14)',
-    borderWidth: 1,
-    borderColor: 'rgba(147,197,253,0.3)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
+  logoMark: { alignItems: 'center', justifyContent: 'center' },
+  logoImage: { width: 38, height: 38 },
   logoText: {
     fontSize: 22,
     fontWeight: '700',
@@ -237,6 +231,7 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(255,255,255,0.15)',
     gap: 8,
   },
+  socialDisabled: { opacity: 0.4 },
   socialText: {
     fontSize: 14,
     fontWeight: '600',

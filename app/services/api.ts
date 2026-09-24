@@ -1,3 +1,4 @@
+import { ApiError, NETWORK_MESSAGE, messageForStatus } from './errors';
 import { setUserCountry } from './currency';
 
 // Production API. Override with EXPO_PUBLIC_API_URL for local development.
@@ -9,7 +10,7 @@ const cartCountListeners = new Set<(count: number) => void>();
 
 export function subscribeToCartCount(listener: (count: number) => void) {
   cartCountListeners.add(listener);
-  return () => cartCountListeners.delete(listener);
+  return () => { cartCountListeners.delete(listener); };
 }
 
 function notifyCartCount(count: number) {
@@ -199,14 +200,17 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   headers.set('Content-Type', 'application/json');
   if (accessToken) headers.set('Authorization', `Bearer ${accessToken}`);
 
-  const response = await fetch(`${API_BASE_URL}${path}`, { ...options, headers });
+  let response: Response;
+  try {
+    response = await fetch(`${API_BASE_URL}${path}`, { ...options, headers });
+  } catch {
+    // No signal, airplane mode, DNS or a dropped connection: nothing came back at all.
+    throw new ApiError(NETWORK_MESSAGE, 0);
+  }
   const body = await response.json().catch(() => ({}));
   if (!response.ok) {
     // A crash returns an HTML page, which leaves nothing readable in `body`.
-    const fallback = response.status >= 500
-      ? `The server hit an error (${response.status}). Please try again shortly.`
-      : `The request failed (${response.status}).`;
-    throw new Error(formatApiError(body) || fallback);
+    throw new ApiError(messageForStatus(response.status, formatApiError(body)), response.status);
   }
   return body as T;
 }
@@ -277,6 +281,27 @@ export async function login(email: string, password: string) {
 
 export async function sendSignupOtp(email: string) {
   return request<{ message: string }>('/otp-send/', { method: 'POST', body: JSON.stringify({ email }) });
+}
+
+/** Forgotten password: email a code, check it, then set the new password. */
+// Signed-out customers use these, so an "authentication" error is never about their own session.
+const resetUnavailable = (error: unknown): never => {
+  if (error instanceof ApiError && error.status === 401) {
+    throw new ApiError('Password reset is not available right now. Please try again shortly.', 401);
+  }
+  throw error;
+};
+
+export async function sendResetPasswordOtp(email: string) {
+  return request<{ message: string }>('/send_reset_password_otp/', { method: 'POST', body: JSON.stringify({ email }) }).catch(resetUnavailable);
+}
+
+export async function verifyResetPasswordOtp(email: string, otp: string) {
+  return request<{ uidb64: string; token: string }>('/verify_reset_password_otp/', { method: 'POST', body: JSON.stringify({ email, otp }) }).catch(resetUnavailable);
+}
+
+export async function resetPassword(payload: { uidb64: string; token: string; password: string }) {
+  return request<{ message: string }>('/reset_password/', { method: 'POST', body: JSON.stringify(payload) }).catch(resetUnavailable);
 }
 
 export async function register(payload: { email: string; username: string; password: string; password2: string; first_name: string; last_name: string; phone: string; country: string; accept_terms: boolean; otp: string }) {
@@ -366,6 +391,37 @@ export async function updateEditory(editoryId: number, payload: Record<string, u
   return request<{ success: boolean; data: Editory; message?: string }>(`/update-editory/${editoryId}/edit/`, {
     method: 'PATCH', body: JSON.stringify(payload),
   });
+}
+
+/** Whether a full domain name such as "mybrand.com" is free to register. */
+export async function checkDomain(domain: string): Promise<boolean> {
+  const result = await request<{ domain: string; isAvailable: boolean }>(`/domain_check/?domain=${encodeURIComponent(domain)}`);
+  return Boolean(result.isAvailable);
+}
+
+export type PickedFile = { uri: string; name: string; type: string; size?: number };
+
+/** Attaches documents to a project prompt (and removes saved ones). Sent as a form, not JSON. */
+export async function updateEditoryAttachments(editoryId: number, files: PickedFile[], removeIds: number[] = []) {
+  const form = new FormData();
+  files.forEach((file) => form.append('attachments', { uri: file.uri, name: file.name, type: file.type } as any));
+  if (removeIds.length) form.append('remove_attachments', removeIds.join(','));
+
+  let response: Response;
+  try {
+    response = await fetch(`${API_BASE_URL}/update-editory/${editoryId}/edit/`, {
+      method: 'PATCH',
+      headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {},
+      body: form,
+    });
+  } catch {
+    throw new ApiError(NETWORK_MESSAGE, 0);
+  }
+  const body = await response.json().catch(() => ({}));
+  if (!response.ok || body?.success === false) {
+    throw new ApiError(messageForStatus(response.status, formatApiError(body)), response.status);
+  }
+  return body as { success: boolean; message?: string; data?: Record<string, any> };
 }
 
 export async function listEditories() {
@@ -530,8 +586,10 @@ export async function payCartWithWallet(currency: string) {
   );
 }
 
+export const getNotifications = () => request<any>('/notifications/');
+
 export async function fetchConversationToken(): Promise<string | { agent_id: string }> {
-  if (!accessToken) throw new Error('Please sign in before starting a voice session.');
+  if (!accessToken) throw new ApiError('Please sign in before starting a voice session.', 401);
   const response = await fetch(`${API_BASE_URL}/voice/conversation-token/`, {
     headers: { Authorization: `Bearer ${accessToken}` },
   });
@@ -545,7 +603,7 @@ export async function fetchConversationToken(): Promise<string | { agent_id: str
     } catch {
       // The server may return plain text for infrastructure errors.
     }
-    throw new Error(`Voice service (${response.status}): ${message}`);
+    throw new ApiError(messageForStatus(response.status, message), response.status);
   }
   if (!body.trim()) throw new Error('Voice service returned an empty conversation token.');
   try {

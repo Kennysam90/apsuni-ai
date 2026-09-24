@@ -27,6 +27,7 @@ import {
 } from '../../services/api';
 import { formatMoney, useCurrency } from '../../services/currency';
 
+import { friendlyError } from '../../services/errors';
 type OrderTab = 'Completed' | 'Pending' | 'Cancel';
 type SortMode = 'newest' | 'oldest' | 'highest';
 
@@ -129,7 +130,7 @@ export default function OrderHistoryScreen() {
 			const response = await listCustomerOrders();
 			setOrders(response.orders ?? []);
 		} catch (requestError) {
-			setError(requestError instanceof Error ? requestError.message : 'Unable to load orders.');
+			setError(friendlyError(requestError, 'Unable to load orders.'));
 		} finally {
 			setIsLoading(false);
 			setIsRefreshing(false);
@@ -234,7 +235,7 @@ export default function OrderHistoryScreen() {
 			showAlert(result.detail || `Order #${order.id} was cancelled.`);
 			await loadOrders('refresh');
 		} catch (cancelError) {
-			showAlert(cancelError instanceof Error ? cancelError.message : 'Could not cancel this order.');
+			showAlert(friendlyError(cancelError, 'Could not cancel this order.'));
 		} finally {
 			setCancellingId(null);
 		}

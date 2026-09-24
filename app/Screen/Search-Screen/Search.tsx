@@ -21,6 +21,7 @@ import PreviewModal from '../../components/PreviewModal';
 import { addEditoryToCart, createEditory, deleteBucketItem, getAccessToken, getApiAssetUrl, listEditories, searchMarketplaceProducts, type DesignResult } from '../../services/api';
 import { useCurrency } from '../../services/currency';
 
+import { friendlyError } from '../../services/errors';
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 /** Mobile-app products preview inside a phone frame. */
@@ -48,6 +49,7 @@ export default function SearchScreen() {
   const [page, setPage] = useState(1);
   const [pages, setPages] = useState(1);
   const [isLoading, setIsLoading] = useState(true);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [previewProduct, setPreviewProduct] = useState<DesignResult | null>(null);
 
@@ -63,20 +65,27 @@ export default function SearchScreen() {
     }
 
     const loadProducts = async () => {
-      setIsLoading(true);
+      const isFirstPage = page === 1;
+      if (isFirstPage) setIsLoading(true); else setIsLoadingMore(true);
       setError(null);
       try {
         const categories: ('Mobile App' | 'Website')[] = activeFilter === 'Mobile' ? ['Mobile App'] : activeFilter === 'Web' ? ['Website'] : ['Mobile App', 'Website'];
         const file = activeFilter === 'Figma' ? 'figma' : '';
         const responses = await Promise.all(categories.map((category) => searchMarketplaceProducts(searchQuery, category, file, page)));
         if (isMounted) {
-          setProducts(responses.flatMap((response) => response.products ?? []));
+          const incoming = responses.flatMap((response) => response.products ?? []);
+          // Later pages are appended to what is already shown; a new search or filter (page 1) starts over.
+          setProducts((current) => {
+            if (isFirstPage) return incoming;
+            const seen = new Set(current.map((item) => String(item.id ?? item.pid)));
+            return [...current, ...incoming.filter((item) => !seen.has(String(item.id ?? item.pid)))];
+          });
           setPages(Math.max(1, ...responses.map((response) => response.pages || 1)));
         }
       } catch (requestError) {
-        if (isMounted) setError(requestError instanceof Error ? requestError.message : 'Unable to load products.');
+        if (isMounted) setError(friendlyError(requestError, 'Unable to load products.'));
       } finally {
-        if (isMounted) setIsLoading(false);
+        if (isMounted) { setIsLoading(false); setIsLoadingMore(false); }
       }
     };
 
@@ -104,6 +113,13 @@ export default function SearchScreen() {
     setHasSetInitialSelection(true);
   }, [bucketProducts, hasSetInitialSelection]);
 
+  // Only ask for the next page once the user nears the bottom, and only while more pages remain.
+  const loadMoreIfNeeded = ({ nativeEvent }: { nativeEvent: { layoutMeasurement: { height: number }; contentOffset: { y: number }; contentSize: { height: number } } }) => {
+    const { layoutMeasurement, contentOffset, contentSize } = nativeEvent;
+    const nearBottom = layoutMeasurement.height + contentOffset.y >= contentSize.height - 240;
+    if (nearBottom && !isLoading && !isLoadingMore && !error && page < pages) setPage((current) => current + 1);
+  };
+
   const updateSearch = (value: string) => { setSearchQuery(value); setPage(1); };
   const updateFilter = (filter: 'All' | 'Mobile' | 'Web' | 'Figma') => { setActiveFilter(filter); setPage(1); setFilterVisible(false); };
   const addToBucket = async (product: DesignResult) => {
@@ -123,7 +139,7 @@ export default function SearchScreen() {
       });
       setBucketProducts((current) => current.some((item) => String(item.id ?? item.pid) === id) ? current : [...current, { ...product, editoryId: created.data.id }]);
     } catch (error) {
-      setError(error instanceof Error ? error.message : 'Could not add this product to your bucket.');
+      setError(friendlyError(error, 'Could not add this product to your bucket.'));
     } finally {
       setBucketAddingId(null);
     }
@@ -157,7 +173,7 @@ export default function SearchScreen() {
       setBucketProducts((current) => current.filter((item) => Number(item.editoryId ?? item.id) !== editoryId));
       setSelectedBucketId(null);
     } catch (deleteError) {
-      setError(deleteError instanceof Error ? deleteError.message : 'Could not delete this bucket item.');
+      setError(friendlyError(deleteError, 'Could not delete this bucket item.'));
     }
   };
 
@@ -167,7 +183,7 @@ export default function SearchScreen() {
     try {
       await addEditoryToCart(editoryId);
     } catch (cartError) {
-      setError(cartError instanceof Error ? cartError.message : 'Could not add this item to your cart.');
+      setError(friendlyError(cartError, 'Could not add this item to your cart.'));
     }
   };
 
@@ -184,6 +200,8 @@ export default function SearchScreen() {
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
         stickyHeaderIndices={[0]}
+        onScroll={loadMoreIfNeeded}
+        scrollEventThrottle={200}
       >
         {/* --- TEAMS LIST (STORY BAR) --- */}
         <View style={styles.teamsSection}>
@@ -230,7 +248,7 @@ export default function SearchScreen() {
               </TouchableOpacity>
               {filterVisible && (
                 <View style={styles.filterMenu}>
-                  {(['All', 'Mobile', 'Web', 'Figma'] as const).map((filter) => (
+                  {(['All', 'Mobile', 'Web'] as const).map((filter) => (
                     <TouchableOpacity key={filter} style={[styles.filterOption, activeFilter === filter && styles.filterOptionActive]} onPress={() => updateFilter(filter)}>
                       <Text style={styles.filterOptionText}>{filter}</Text>
                       {activeFilter === filter && <Feather name="check" size={15} color="#60A5FA" />}
@@ -357,11 +375,9 @@ export default function SearchScreen() {
             ))}
           </View>
         )}
-        {pages > 1 && !isLoading && (
-          <View style={styles.pagination}>
-            <TouchableOpacity disabled={page === 1} onPress={() => setPage((current) => current - 1)}><Text style={[styles.paginationText, page === 1 && styles.paginationDisabled]}>Previous</Text></TouchableOpacity>
-            <Text style={styles.pageLabel}>Page {page} of {pages}</Text>
-            <TouchableOpacity disabled={page === pages} onPress={() => setPage((current) => current + 1)}><Text style={[styles.paginationText, page === pages && styles.paginationDisabled]}>Next</Text></TouchableOpacity>
+        {isLoadingMore && (
+          <View style={styles.loadMore}>
+            <ActivityIndicator size="small" color="#38BDF8" />
           </View>
         )}
       </ScrollView>
@@ -753,6 +769,7 @@ const styles = StyleSheet.create({
     color: '#94A3B8',
     fontSize: 10,
   },
+  loadMore: { alignItems: 'center', justifyContent: 'center', paddingVertical: 22 },
   pagination: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 24, paddingVertical: 18 },
   paginationText: { color: '#60A5FA', fontSize: 14, fontWeight: '700' },
   paginationDisabled: { color: '#475569' },

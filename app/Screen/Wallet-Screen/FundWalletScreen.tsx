@@ -37,6 +37,7 @@ import {
 } from '../../services/api';
 import { formatMoney, useCurrency } from '../../services/currency';
 
+import { friendlyError } from '../../services/errors';
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
 /**
@@ -131,7 +132,7 @@ function cardExpiry(card: SavedCard) {
 	return '';
 }
 
-const errorMessage = (error: unknown, fallback: string) => (error instanceof Error && error.message ? error.message : fallback);
+const errorMessage = (error: unknown, fallback: string) => friendlyError(error, fallback);
 
 /* ------------------------------------------------------------------ */
 /* Animated building blocks                                            */

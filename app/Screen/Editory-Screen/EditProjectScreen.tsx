@@ -19,9 +19,10 @@ import {
 import AppBackground from '../../components/AppBackground';
 import AppHeader from '../../components/AppHeader';
 import { useAppAlert } from '../../components/AppAlert';
-import { listEditories, updateEditory, type Editory } from '../../services/api';
+import { checkDomain, listEditories, updateEditory, updateEditoryAttachments, type Editory, type PickedFile } from '../../services/api';
 import { formatMoney } from '../../services/currency';
 
+import { friendlyError } from '../../services/errors';
 /* ========== DOMAIN EXTENSION PRICING (NGN) ========== */
 const DOMAIN_EXTENSION_PRICES: Record<string, number> = {
 	'.com': 30000,
@@ -202,6 +203,26 @@ function money(value: number) {
 	return formatMoney(value, { decimals: false });
 }
 
+type DomainState = { status: 'idle' | 'checking' | 'available' | 'taken' | 'invalid' | 'error'; message: string };
+type SavedAttachment = { id: number; name: string; size: number; url?: string };
+
+const ATTACHMENT_EXTENSIONS = ['pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'txt', 'csv', 'rtf', 'png', 'jpg', 'jpeg', 'webp', 'zip'];
+const MAX_ATTACHMENTS = 5;
+const MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024;
+
+const extensionOf = (name: string) => (name.split('.').pop() || '').toLowerCase();
+const fileIcon = (name: string): keyof typeof Feather.glyphMap => {
+	const extension = extensionOf(name);
+	if (['png', 'jpg', 'jpeg', 'webp'].includes(extension)) return 'image';
+	if (extension === 'zip') return 'archive';
+	return 'file-text';
+};
+const fileSize = (bytes?: number) => {
+	if (!bytes) return '';
+	if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024))} KB`;
+	return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+};
+
 function Field({
 	label,
 	value,
@@ -211,6 +232,8 @@ function Field({
 	multiline,
 	hint,
 	autoCapitalize,
+	status,
+	message,
 }: {
 	label: string;
 	value: string;
@@ -220,6 +243,8 @@ function Field({
 	multiline?: boolean;
 	hint?: string;
 	autoCapitalize?: 'none' | 'sentences' | 'words';
+	status?: 'checking' | 'success' | 'error' | 'warning';
+	message?: string;
 }) {
 	const [focused, setFocused] = useState(false);
 	return (
@@ -235,9 +260,28 @@ function Field({
 				multiline={multiline}
 				onFocus={() => setFocused(true)}
 				onBlur={() => setFocused(false)}
-				style={[styles.input, multiline && styles.inputMultiline, focused && styles.inputFocused]}
+				style={[
+					styles.input,
+					multiline && styles.inputMultiline,
+					focused && styles.inputFocused,
+					status === 'success' && styles.inputSuccess,
+					status === 'error' && styles.inputError,
+				]}
 			/>
-			{hint ? <Text style={styles.fieldHint}>{hint}</Text> : null}
+			{status && message ? (
+				<View style={styles.statusRow}>
+					{status === 'checking' ? (
+						<ActivityIndicator size="small" color="#60A5FA" />
+					) : (
+						<Feather
+							name={status === 'success' ? 'check-circle' : status === 'warning' ? 'alert-triangle' : 'x-circle'}
+							size={14}
+							color={status === 'success' ? '#4ADE80' : status === 'warning' ? '#FBBF24' : '#F87171'}
+						/>
+					)}
+					<Text style={[styles.statusText, status === 'success' && { color: '#86EFAC' }, status === 'error' && { color: '#FCA5A5' }, status === 'warning' && { color: '#FCD34D' }]}>{message}</Text>
+				</View>
+			) : hint ? <Text style={styles.fieldHint}>{hint}</Text> : null}
 		</View>
 	);
 }
@@ -340,6 +384,11 @@ export default function EditProjectScreen() {
 	const [isLoading, setIsLoading] = useState(true);
 	const [isSaving, setIsSaving] = useState(false);
 	const [loadError, setLoadError] = useState<string | null>(null);
+	const [domainState, setDomainState] = useState<DomainState>({ status: 'idle', message: '' });
+	const [savedFiles, setSavedFiles] = useState<SavedAttachment[]>([]);
+	const [pendingFiles, setPendingFiles] = useState<PickedFile[]>([]);
+	const [removedIds, setRemovedIds] = useState<number[]>([]);
+	const domainTicket = useRef(0);
 
 	const stepAnim = useRef(new Animated.Value(1)).current;
 	const scrollRef = useRef<ScrollView | null>(null);
@@ -367,6 +416,7 @@ export default function EditProjectScreen() {
 
 				const rawType = String(product.product_type || product.project_type || product.type || params.productType || '').trim();
 				setRawProductType(rawType);
+				setSavedFiles(Array.isArray(product.attachments) ? product.attachments.map((file: any) => ({ id: Number(file.id), name: String(file.name), size: Number(file.size) || 0, url: file.url })) : []);
 				setBaseTotal(Number(product.total_amount || product.price || params.price || 0) || 0);
 				setForm((current) => ({
 					...current,
@@ -419,7 +469,7 @@ export default function EditProjectScreen() {
 				}));
 			})
 			.catch((error) => {
-				if (isMounted) setLoadError(error instanceof Error ? error.message : 'Unable to load this project.');
+				if (isMounted) setLoadError(friendlyError(error, 'Unable to load this project.'));
 			})
 			.finally(() => {
 				if (isMounted) setIsLoading(false);
@@ -443,6 +493,74 @@ export default function EditProjectScreen() {
 			apsuni_app_store: false,
 		}));
 	}, [isMobileApp]);
+
+	/* Ask the server whether the domain is free, a moment after the person stops typing. */
+	useEffect(() => {
+		const name = String(form.domain || '').trim().toLowerCase();
+		if (!name) { setDomainState({ status: 'idle', message: '' }); return undefined; }
+
+		const full = `${name}${form.domain_extension}`;
+		if (name.includes('.')) { setDomainState({ status: 'invalid', message: 'Type the name only, without .com or .net. Pick the extension from the list below.' }); return undefined; }
+		if (/^-|-$/.test(name)) { setDomainState({ status: 'invalid', message: 'A domain name cannot start or end with a hyphen.' }); return undefined; }
+		if (!/^[a-z0-9-]+$/.test(name)) { setDomainState({ status: 'invalid', message: 'Use only letters, numbers and hyphens. Spaces and symbols are not allowed.' }); return undefined; }
+		if (name.length < 2) { setDomainState({ status: 'invalid', message: 'A domain name needs at least 2 characters.' }); return undefined; }
+
+		setDomainState({ status: 'checking', message: `Checking ${full}…` });
+		const ticket = ++domainTicket.current;
+		const timer = setTimeout(async () => {
+			try {
+				const free = await checkDomain(full);
+				if (ticket !== domainTicket.current) return;
+				setDomainState(free
+					? { status: 'available', message: `${full} is available.` }
+					: { status: 'taken', message: `${full} is already registered to someone else. Choose a different name, or try another extension such as .net or .ng.` });
+			} catch (error) {
+				if (ticket !== domainTicket.current) return;
+				setDomainState({ status: 'error', message: friendlyError(error, 'We could not check this domain right now.') + ' You can still continue and we will confirm it for you.' });
+			}
+		}, 600);
+		return () => clearTimeout(timer);
+	}, [form.domain, form.domain_extension]);
+
+	const attachmentCount = savedFiles.length + pendingFiles.length;
+
+	const pickFiles = async () => {
+		if (attachmentCount >= MAX_ATTACHMENTS) {
+			showAlert({ title: 'Attachment limit', message: `You can attach up to ${MAX_ATTACHMENTS} files to a project.` });
+			return;
+		}
+		let picker: any;
+		try {
+			// Loaded on demand so older builds without the picker still open this screen.
+			picker = require('expo-document-picker');
+		} catch {
+			showAlert({ title: 'Update needed', message: 'Attaching files needs the latest version of the Apsuni app. Please update the app and try again.' });
+			return;
+		}
+		try {
+			const result = await picker.getDocumentAsync({ multiple: true, copyToCacheDirectory: true, type: '*/*' });
+			if (result.canceled) return;
+			const accepted: PickedFile[] = [];
+			const skipped: string[] = [];
+			for (const asset of result.assets ?? []) {
+				const name = String(asset.name || 'file');
+				if (!ATTACHMENT_EXTENSIONS.includes(extensionOf(name))) { skipped.push(`${name} (this file type is not supported)`); continue; }
+				if ((asset.size ?? 0) > MAX_ATTACHMENT_BYTES) { skipped.push(`${name} (larger than 10 MB)`); continue; }
+				if (pendingFiles.some((file) => file.name === name) || savedFiles.some((file) => file.name === name)) { skipped.push(`${name} (already attached)`); continue; }
+				if (attachmentCount + accepted.length >= MAX_ATTACHMENTS) { skipped.push(`${name} (limit of ${MAX_ATTACHMENTS} files reached)`); continue; }
+				accepted.push({ uri: asset.uri, name, type: asset.mimeType || 'application/octet-stream', size: asset.size ?? undefined });
+			}
+			if (accepted.length) setPendingFiles((current) => [...current, ...accepted]);
+			if (skipped.length) showAlert({ title: 'Some files were not added', message: skipped.join('\n') });
+		} catch {
+			showAlert({ title: 'Could not open your files', message: 'Please try again.' });
+		}
+	};
+
+	const removeSaved = (file: SavedAttachment) => {
+		setSavedFiles((current) => current.filter((item) => item.id !== file.id));
+		setRemovedIds((current) => [...current, file.id]);
+	};
 
 	const domainPrice = DOMAIN_EXTENSION_PRICES[form.domain_extension] || 0;
 	const selectedHostingPlan = useMemo(() => {
@@ -497,6 +615,15 @@ export default function EditProjectScreen() {
 
 	const submit = async () => {
 		if (!Number.isFinite(editoryId)) return;
+		if (domainState.status === 'taken' || domainState.status === 'invalid') {
+			showAlert({ title: 'Check your domain', message: domainState.message });
+			goToStep(3);
+			return;
+		}
+		if (domainState.status === 'checking') {
+			showAlert({ title: 'One moment', message: 'We are still checking your domain name. Please try again in a second.' });
+			return;
+		}
 		setIsSaving(true);
 		try {
 			const payload = {
@@ -521,7 +648,7 @@ export default function EditProjectScreen() {
 				server_type: form.server_type,
 				server_size: form.server_size,
 				domain: form.domain,
-				domain_name: form.domain_name,
+				domain_name: form.domain ? `${String(form.domain).trim().toLowerCase()}${form.domain_extension}` : form.domain_name,
 				domain_extension: form.domain_extension,
 				domain_price: domainPrice,
 				hosting_provider: form.hosting_provider,
@@ -556,10 +683,19 @@ export default function EditProjectScreen() {
 			};
 
 			const result = await updateEditory(editoryId, payload);
+			if (pendingFiles.length || removedIds.length) {
+				try {
+					await updateEditoryAttachments(editoryId, pendingFiles, removedIds);
+				} catch (attachError) {
+					// The project itself saved; only the files failed, so stay here so they can be retried.
+					showAlert({ title: 'Project saved, files not uploaded', message: friendlyError(attachError, 'Your attachments could not be uploaded. Please try again.') });
+					return;
+				}
+			}
 			showAlert(result.message || 'Project updated successfully.');
 			router.back();
 		} catch (error) {
-			showAlert(error instanceof Error ? error.message : 'Could not save this project.');
+			showAlert(friendlyError(error, 'Could not save this project.'));
 		} finally {
 			setIsSaving(false);
 		}
@@ -648,7 +784,47 @@ export default function EditProjectScreen() {
 									<ChipGroup label="This project belongs to" options={['Individual', 'Company']} value={form.status} onSelect={(value) => set('status', value)} />
 									<Field label="Project title" value={form.title} onChange={(value) => set('title', value)} placeholder="Project title" />
 									<Field label="Project name" value={form.project_name} onChange={(value) => set('project_name', value)} placeholder="Internal project name" />
-									<Field label="Description" value={form.description} onChange={(value) => set('description', value)} placeholder="What does this project do?" multiline />
+									<View style={styles.field}>
+										<Text style={styles.fieldLabel}>Prompt</Text>
+										<View>
+											<TextInput
+												value={form.description}
+												onChangeText={(value) => set('description', value)}
+												placeholder="Tell us what you want built. Write it out, or paste bullet points and notes."
+												placeholderTextColor="#64748B"
+												multiline
+												style={[styles.input, styles.inputMultiline, styles.promptInput]}
+											/>
+											<TouchableOpacity style={styles.attachButton} activeOpacity={0.85} onPress={pickFiles} accessibilityLabel="Attach files">
+												<Feather name="plus" size={18} color="#FFFFFF" />
+											</TouchableOpacity>
+										</View>
+										<Text style={styles.fieldHint}>Tap + to attach documents such as PDF, Word, Excel, images or a zip. Up to {MAX_ATTACHMENTS} files, 10 MB each.</Text>
+										{(savedFiles.length > 0 || pendingFiles.length > 0) && (
+											<View style={styles.fileList}>
+												{savedFiles.map((file) => (
+													<View key={`saved-${file.id}`} style={styles.fileChip}>
+														<View style={styles.fileIcon}><Feather name={fileIcon(file.name)} size={15} color="#60A5FA" /></View>
+														<TouchableOpacity style={styles.fileInfo} activeOpacity={file.url ? 0.7 : 1} onPress={() => file.url && Linking.openURL(file.url).catch(() => undefined)}>
+															<Text style={styles.fileName} numberOfLines={1}>{file.name}</Text>
+															<Text style={styles.fileMeta}>Saved{file.size ? ` · ${fileSize(file.size)}` : ''}</Text>
+														</TouchableOpacity>
+														<TouchableOpacity onPress={() => removeSaved(file)} hitSlop={8} accessibilityLabel={`Remove ${file.name}`}><Feather name="trash-2" size={15} color="#94A3B8" /></TouchableOpacity>
+													</View>
+												))}
+												{pendingFiles.map((file) => (
+													<View key={`new-${file.name}`} style={[styles.fileChip, styles.fileChipNew]}>
+														<View style={[styles.fileIcon, styles.fileIconNew]}><Feather name={fileIcon(file.name)} size={15} color="#4ADE80" /></View>
+														<View style={styles.fileInfo}>
+															<Text style={styles.fileName} numberOfLines={1}>{file.name}</Text>
+															<Text style={[styles.fileMeta, { color: '#86EFAC' }]}>Ready to upload{file.size ? ` · ${fileSize(file.size)}` : ''}</Text>
+														</View>
+														<TouchableOpacity onPress={() => setPendingFiles((current) => current.filter((item) => item.name !== file.name))} hitSlop={8} accessibilityLabel={`Remove ${file.name}`}><Feather name="x" size={16} color="#94A3B8" /></TouchableOpacity>
+													</View>
+												))}
+											</View>
+										)}
+									</View>
 									<Field label="SKU" value={form.sku} onChange={(value) => set('sku', value)} placeholder="sku-000" autoCapitalize="none" hint="Auto-generated when the project has none." />
 								</SectionCard>
 							</>
@@ -711,14 +887,23 @@ export default function EditProjectScreen() {
 						{step === 3 && (
 							<>
 								<SectionCard title="Domain" icon="globe">
-									<Field label="Domain name" value={form.domain} onChange={(value) => set('domain', value)} placeholder="yourbrand" autoCapitalize="none" hint="Type the name only - pick the extension below." />
+									<Field
+										label="Domain name"
+										value={form.domain}
+										onChange={(value) => set('domain', value.toLowerCase().replace(/\s/g, ''))}
+										placeholder="yourbrand"
+										autoCapitalize="none"
+										hint="Type the name only - pick the extension below."
+										status={domainState.status === 'available' ? 'success' : domainState.status === 'taken' || domainState.status === 'invalid' ? 'error' : domainState.status === 'checking' ? 'checking' : domainState.status === 'error' ? 'warning' : undefined}
+										message={domainState.message}
+									/>
 									<ChipGroup
 										label="Extension"
 										options={Object.keys(DOMAIN_EXTENSION_PRICES)}
 										value={form.domain_extension}
 										onSelect={(value) => set('domain_extension', value)}
 									/>
-									{form.domain ? (
+									{form.domain && domainState.status === 'available' ? (
 										<View style={styles.inlineNotice}>
 											<Feather name="tag" size={13} color="#60A5FA" />
 											<Text style={styles.inlineNoticeText}>
@@ -946,6 +1131,20 @@ const styles = StyleSheet.create({
 	input: { backgroundColor: '#0E1726', borderRadius: 12, borderWidth: 1, borderColor: '#24334A', paddingHorizontal: 13, paddingVertical: 11, color: '#FFFFFF', fontSize: 13 },
 	inputMultiline: { minHeight: 84, textAlignVertical: 'top' },
 	inputFocused: { borderColor: '#2563EB' },
+	inputSuccess: { borderColor: '#22C55E', backgroundColor: 'rgba(34, 197, 94, 0.08)' },
+	inputError: { borderColor: '#EF4444', backgroundColor: 'rgba(239, 68, 68, 0.08)' },
+	statusRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 7, marginTop: 8 },
+	statusText: { flex: 1, fontSize: 12, lineHeight: 17, fontWeight: '600', color: '#94A3B8' },
+	promptInput: { minHeight: 120, paddingBottom: 52 },
+	attachButton: { position: 'absolute', right: 10, bottom: 10, width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center', backgroundColor: '#2563EB', elevation: 4, shadowColor: '#2563EB', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.4, shadowRadius: 8 },
+	fileList: { gap: 8, marginTop: 12 },
+	fileChip: { flexDirection: 'row', alignItems: 'center', gap: 10, padding: 10, borderRadius: 12, backgroundColor: '#0E1726', borderWidth: 1, borderColor: '#24334A' },
+	fileChipNew: { borderColor: 'rgba(74, 222, 128, 0.4)', backgroundColor: 'rgba(22, 163, 74, 0.08)' },
+	fileIcon: { width: 32, height: 32, borderRadius: 9, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(37, 99, 235, 0.16)' },
+	fileIconNew: { backgroundColor: 'rgba(34, 197, 94, 0.16)' },
+	fileInfo: { flex: 1, minWidth: 0 },
+	fileName: { fontSize: 12.5, fontWeight: '600', color: '#F1F5F9' },
+	fileMeta: { fontSize: 11, color: '#64748B', marginTop: 2 },
 
 	chipWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
 	chip: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 20, backgroundColor: '#172235', borderWidth: 1, borderColor: '#24334A' },

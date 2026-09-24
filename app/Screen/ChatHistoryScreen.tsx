@@ -7,6 +7,7 @@ import AppBackground from '../components/AppBackground';
 import { useAppAlert } from '../components/AppAlert';
 import AppHeader from '../components/AppHeader';
 
+import { friendlyError } from '../services/errors';
 export default function ChatHistoryScreen() {
   const router = useRouter();
   const { showAlert } = useAppAlert();
@@ -19,7 +20,7 @@ export default function ChatHistoryScreen() {
     try {
       setItems(await getConversationHistory() as ConversationHistoryItem[]);
     } catch (error) {
-      showAlert(error instanceof Error ? error.message : 'Could not load chat history.');
+      showAlert(friendlyError(error, 'Could not load chat history.'));
     } finally {
       setLoading(false);
       setRefreshing(false);

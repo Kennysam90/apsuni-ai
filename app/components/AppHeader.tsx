@@ -8,6 +8,7 @@ import BackButton from './BackButton';
 import CartDrawer from './CartDrawer';
 import WalletPicker from './WalletPicker';
 import { subscribeToCartCount, viewCart } from '../services/api';
+import { subscribeToUnreadNotifications } from '../services/notificationCenter';
 
 type AppHeaderProps = { onBack?: () => void; onCart?: () => void; onNotification?: () => void; title?: string };
 
@@ -15,7 +16,10 @@ export default function AppHeader({ onBack, onCart, onNotification, title }: App
   const router = useRouter();
   const [cartVisible, setCartVisible] = useState(false);
   const [cartCount, setCartCount] = useState(0);
+  const [unreadCount, setUnreadCount] = useState(0);
   const openCart = () => onCart ? onCart() : setCartVisible(true);
+
+  useEffect(() => subscribeToUnreadNotifications(setUnreadCount), []);
 
   useEffect(() => {
     viewCart().then((result) => setCartCount(result.total_items || 0)).catch(() => setCartCount(0));
@@ -26,7 +30,7 @@ export default function AppHeader({ onBack, onCart, onNotification, title }: App
     <View style={styles.header}>
       <View style={styles.headerLeftActions}>
         <BackButton onBack={onBack} />
-        <TouchableOpacity accessibilityRole="button" accessibilityLabel="Notifications" activeOpacity={0.75} style={styles.headerIconButton} onPress={onNotification}><Feather name="bell" size={20} color="#FFFFFF" /></TouchableOpacity>
+        <TouchableOpacity accessibilityRole="button" accessibilityLabel="Notifications" activeOpacity={0.75} style={styles.headerIconButton} onPress={() => onNotification ? onNotification() : router.push('/Screen/NotificationsScreen')}><Feather name="bell" size={20} color="#FFFFFF" />{unreadCount > 0 && <View style={styles.cartBadge}><Text style={styles.cartBadgeText}>{unreadCount > 99 ? '99+' : unreadCount}</Text></View>}</TouchableOpacity>
       </View>
       <View style={styles.headerRightActions}>
         <TouchableOpacity accessibilityRole="button" accessibilityLabel="Open cart" activeOpacity={0.75} style={styles.headerIconButton} onPress={openCart}>

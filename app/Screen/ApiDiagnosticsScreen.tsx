@@ -6,6 +6,7 @@ import LoadingButton from '../components/LoadingButton';
 import { useAppAlert } from '../components/AppAlert';
 import { addTemplateToCart, getBusinessChecklist, getBusinessSuggestions, getGreeting, getTemplates, getWalletBalance, sendAssistantMessage, synthesizeSpeech, Template } from '../services/api';
 
+import { friendlyError } from '../services/errors';
 export default function ApiDiagnosticsScreen() {
   const router = useRouter();
   const { showAlert } = useAppAlert();
@@ -21,7 +22,7 @@ export default function ApiDiagnosticsScreen() {
       const result = await task();
       setOutput(JSON.stringify(result, null, 2));
     } catch (error) {
-      const text = error instanceof Error ? error.message : 'Request failed';
+      const text = friendlyError(error, 'Request failed');
       setOutput(text);
       showAlert({ title: `${name} failed`, message: text });
     } finally {
@@ -50,7 +51,7 @@ export default function ApiDiagnosticsScreen() {
           <Text style={styles.label}>Design and wallet APIs</Text>
           <LoadingButton label="List mobile templates" loading={busy === 'templates'} onPress={async () => {
             setBusy('templates');
-            try { const result = await getTemplates('mobile'); setTemplates(result.templates); setOutput(JSON.stringify(result, null, 2)); } catch (error) { showAlert(error instanceof Error ? error.message : 'Template request failed'); } finally { setBusy(''); }
+            try { const result = await getTemplates('mobile'); setTemplates(result.templates); setOutput(JSON.stringify(result, null, 2)); } catch (error) { showAlert(friendlyError(error, 'Template request failed')); } finally { setBusy(''); }
           }} />
           {templates.map((template) => <LoadingButton key={template.id} label={`Add ${template.name} to cart`} loading={busy === template.id} onPress={() => run(template.id, () => addTemplateToCart(template.id))} style={styles.secondaryButton} />)}
           <LoadingButton label="Check wallet balance" loading={busy === 'wallet'} onPress={() => run('wallet', getWalletBalance)} style={styles.secondaryButton} />

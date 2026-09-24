@@ -20,6 +20,7 @@ import LoadingButton from '../../components/LoadingButton';
 import { useAppAlert } from '../../components/AppAlert';
 import { register, sendSignupOtp } from '../../services/api';
 
+import { friendlyError } from '../../services/errors';
 const { width } = Dimensions.get('window');
 
 const OTP_LENGTH = 6;
@@ -141,7 +142,7 @@ export default function OtpVerificationScreen() {
       });
       router.replace('/Screen/Auth/SignInScreen');
     } catch (requestError) {
-      const message = requestError instanceof Error ? requestError.message : 'The code could not be verified.';
+      const message = friendlyError(requestError, 'The code could not be verified.');
       if (isOtpError(message)) {
         failVerification(message);
       } else {
@@ -163,7 +164,7 @@ export default function OtpVerificationScreen() {
       inputRefs.current[0]?.focus();
       showAlert({ title: 'Code sent', message: `A new code is on its way to ${email}.` });
     } catch (requestError) {
-      showAlert({ title: 'Could not resend', message: requestError instanceof Error ? requestError.message : 'Try again in a moment.' });
+      showAlert({ title: 'Could not resend', message: friendlyError(requestError, 'Try again in a moment.') });
     } finally {
       setIsResending(false);
     }

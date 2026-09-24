@@ -26,6 +26,7 @@ import AppHeader from '../../components/AppHeader';
 import { getBusinessSuggestions, getProfile, sendAssistantMessage } from '../../services/api';
 import { buildBusinessGuidePdf, guideFileName } from '../../services/businessGuidePdf';
 
+import { friendlyError } from '../../services/errors';
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
 type BusinessIdea = {
@@ -335,7 +336,7 @@ export default function BusinessIdeaScreen() {
 			setIdeas((response.ideas ?? []).filter(Boolean).map(parseIdea));
 			setAppliedCountry(requestedCountry.trim());
 		} catch (requestError) {
-			setError(requestError instanceof Error ? requestError.message : 'Unable to load business ideas.');
+			setError(friendlyError(requestError, 'Unable to load business ideas.'));
 		} finally {
 			setIsLoading(false);
 			setIsRefreshing(false);
@@ -361,7 +362,7 @@ export default function BusinessIdeaScreen() {
 			else setSections(parsed);
 		} catch (requestError) {
 			if (requestId !== detailRequestId.current) return;
-			setDetailError(requestError instanceof Error ? requestError.message : 'Could not load the details for this idea.');
+			setDetailError(friendlyError(requestError, 'Could not load the details for this idea.'));
 		} finally {
 			if (requestId === detailRequestId.current) setDetailLoading(false);
 		}
@@ -446,7 +447,7 @@ export default function BusinessIdeaScreen() {
 			}
 			Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => undefined);
 		} catch (requestError) {
-			setEmailState({ status: 'error', message: requestError instanceof Error ? requestError.message : 'Could not create the PDF.' });
+			setEmailState({ status: 'error', message: friendlyError(requestError, 'Could not create the PDF.') });
 			Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error).catch(() => undefined);
 		}
 	};

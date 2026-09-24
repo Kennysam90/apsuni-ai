@@ -5,6 +5,7 @@ import { Feather } from '@expo/vector-icons';
 import { getApiAssetUrl, listWallets, payCartWithWallet, viewCart } from '../services/api';
 import { formatMoney } from '../services/currency';
 
+import { friendlyError } from '../services/errors';
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const cartItems = (cart: Record<string, any> | null): Record<string, any>[] => [cart?.items, cart?.cart_items, cart?.products, cart?.data].find(Array.isArray) || [];
 const itemName = (item: Record<string, any>, index: number) => item.title || item.name || item.product?.title || item.product?.name || `Project ${index + 1}`;
@@ -59,7 +60,7 @@ export default function CartDrawer({ visible, onClose }: CartDrawerProps) {
       setResult({ ok: true, title: 'Payment successful', message: [response.message, response.data?.latest_receipt?.receipt_id && `Receipt: ${response.data.latest_receipt.receipt_id}`].filter(Boolean).join('\n') || 'Your projects have been purchased.' });
     } catch (error) {
       setConfirmVisible(false);
-      setResult({ ok: false, title: 'Payment failed', message: error instanceof Error ? error.message : 'Something went wrong. Please try again.' });
+      setResult({ ok: false, title: 'Payment failed', message: friendlyError(error, 'Something went wrong. Please try again.') });
     } finally {
       setPaying(false);
     }

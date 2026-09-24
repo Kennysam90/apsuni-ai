@@ -34,6 +34,7 @@ import { useAppAlert } from '../../components/AppAlert';
 import { formatMoney } from '../../services/currency';
 import DesignGalleryPopup from '@/app/components/DesignGalleryPopup';
 
+import { friendlyError } from '../../services/errors';
 const { height: SCREEN_HEIGHT, width: SCREEN_WIDTH } = Dimensions.get('window');
 
 const COLLAPSED_OFFSET = SCREEN_HEIGHT;
@@ -160,7 +161,7 @@ function VoiceAssessmentScreenInner({
         role: message.role,
         text: message.text,
       })));
-    }).catch((error) => showAlert(error instanceof Error ? error.message : 'Could not load this conversation.'));
+    }).catch((error) => showAlert(friendlyError(error, 'Could not load this conversation.')));
   }, [initialConversationId, showAlert]);
 
   const markProgress = (step: string) => setFlowProgress((current) => current.includes(step) ? current : [...current, step]);
@@ -181,7 +182,7 @@ function VoiceAssessmentScreenInner({
       setDesigns(result.products || []);
       setDesignPages(result.pages || 1);
     } catch (error) {
-      showAlert(error instanceof Error ? error.message : 'Could not load designs.');
+      showAlert(friendlyError(error, 'Could not load designs.'));
     } finally {
       setDesignLoading(false);
     }
@@ -208,7 +209,7 @@ function VoiceAssessmentScreenInner({
       setDesigns(result.products || []);
       setDesignPage(result.page || page);
     } catch (error) {
-      showAlert(error instanceof Error ? error.message : 'Could not load designs.');
+      showAlert(friendlyError(error, 'Could not load designs.'));
     } finally {
       setDesignLoading(false);
     }
@@ -244,7 +245,7 @@ function VoiceAssessmentScreenInner({
       markProgress('Project created');
       markProgress('Added to cart');
     } catch (error) {
-      showAlert(error instanceof Error ? error.message : 'Could not create this project.');
+      showAlert(friendlyError(error, 'Could not create this project.'));
     } finally {
       setDesignLoading(false);
     }
@@ -268,7 +269,7 @@ function VoiceAssessmentScreenInner({
       setChecklist((result.checklist || []) as ChecklistStep[]);
       setChecklistVisible(true);
     } catch (error) {
-      showAlert(error instanceof Error ? error.message : 'Could not create the checklist.');
+      showAlert(friendlyError(error, 'Could not create the checklist.'));
     } finally {
       setIsWaitingForReply(false);
     }
@@ -292,7 +293,7 @@ function VoiceAssessmentScreenInner({
       setCartVisible(false);
       showAlert(result.message || 'Payment completed successfully.');
     } catch (error) {
-      showAlert(error instanceof Error ? error.message : 'Checkout could not be completed.');
+      showAlert(friendlyError(error, 'Checkout could not be completed.'));
     }
   };
 
@@ -310,7 +311,7 @@ function VoiceAssessmentScreenInner({
       const currentCart = await viewCart();
       setCart(currentCart.data);
     } catch (error) {
-      showAlert(error instanceof Error ? error.message : 'Could not load your cart.');
+      showAlert(friendlyError(error, 'Could not load your cart.'));
     } finally {
       setCartLoading(false);
     }
@@ -455,14 +456,14 @@ function VoiceAssessmentScreenInner({
         const errorText = message?.message ?? message?.error ?? String(message);
         console.log('Voice agent error:', errorText);
         setIsWaitingForReply(false);
-        showAlert(`Voice agent error: ${errorText}`);
+        showAlert(friendlyError(String(errorText), 'The voice assistant ran into a problem. Please try again.'));
       },
       });
     } catch (err) {
       console.log('Failed to start voice session:', err);
       hasStartedRef.current = false;
       setIsStartingVoice(false);
-      showAlert(err instanceof Error ? err.message : 'Could not start the voice session. Please try again.');
+      showAlert(friendlyError(err, 'Could not start the voice session. Please try again.'));
     }
   }, [conversation, resetIdleTimer, clearIdleTimer, showAlert]);
 
@@ -518,12 +519,12 @@ function VoiceAssessmentScreenInner({
         openChecklist(prompt);
       }
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'I could not reach the assistant right now.';
+      const message = friendlyError(error, 'I could not reach the assistant right now.');
       showAlert(message);
       setMessages((current) => [...current, {
         id: Date.now().toString() + '-assistant-error',
         role: 'assistant',
-        text: error instanceof Error ? error.message : 'I could not reach the assistant right now.',
+        text: friendlyError(error, 'I could not reach the assistant right now.'),
       }]);
     } finally {
       setIsWaitingForReply(false);

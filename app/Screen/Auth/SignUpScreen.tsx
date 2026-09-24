@@ -5,6 +5,7 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
+  Image,
   ScrollView,
   SafeAreaView,
   StatusBar,
@@ -17,7 +18,7 @@ import {
   Dimensions,
   FlatList,
 } from 'react-native';
-import { Ionicons, FontAwesome5, Octicons, MaterialCommunityIcons, Feather } from '@expo/vector-icons';
+import { Ionicons, FontAwesome5, Octicons, Feather } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import BackButton from '../../components/BackButton';
 import AnimatedAuroraBackground from '../../components/AnimatedAuroraBackground';
@@ -26,6 +27,7 @@ import { useAppAlert } from '../../components/AppAlert';
 import { sendSignupOtp } from '../../services/api';
 import { COUNTRIES, countryFlag, type Country } from '../../services/currency';
 
+import { friendlyError } from '../../services/errors';
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
 const TERMS_UPDATED = 'September 2026';
@@ -159,7 +161,7 @@ export default function SignUpScreen() {
         params: { email: email.trim(), fullName: fullName.trim(), phone: phone.trim(), password, country: country.code, acceptedTerms: 'true' },
       });
     } catch (requestError) {
-      showAlert({ title: 'Sign up failed', message: requestError instanceof Error ? requestError.message : 'Unable to send the verification code.' });
+      showAlert({ title: 'Sign up failed', message: friendlyError(requestError, 'Unable to send the verification code.') });
     } finally {
       setIsSubmitting(false);
     }
@@ -206,8 +208,8 @@ export default function SignUpScreen() {
 
             {/* Logo */}
             <View style={styles.logoRow}>
-              <View style={styles.logoMark}><MaterialCommunityIcons name="atom" size={20} color="#93C5FD" /></View>
-              <Text style={styles.logoText}>Apsuni AI</Text>
+              <View style={styles.logoMark}><Image source={require('../../../assets/images/AL3.png')} style={styles.logoImage} resizeMode="contain" /></View>
+              <Text style={styles.logoText}>Apsuni</Text>
             </View>
 
             <Text style={styles.title}>Create Account</Text>
@@ -219,11 +221,11 @@ export default function SignUpScreen() {
             <View style={styles.formCard}>
               {/* Social Logins */}
               <View style={styles.socialRow}>
-                <TouchableOpacity style={styles.socialPill} activeOpacity={0.8}>
+                <TouchableOpacity style={[styles.socialPill, styles.socialDisabled]} activeOpacity={1} disabled accessibilityState={{ disabled: true }}>
                   <FontAwesome5 name="google" size={16} color="#FFFFFF" />
                   <Text style={styles.socialText}>Google</Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={styles.socialPill} activeOpacity={0.8}>
+                <TouchableOpacity style={[styles.socialPill, styles.socialDisabled]} activeOpacity={1} disabled accessibilityState={{ disabled: true }}>
                   <FontAwesome5 name="apple" size={18} color="#FFFFFF" />
                   <Text style={styles.socialText}>Apple</Text>
                 </TouchableOpacity>
@@ -472,16 +474,8 @@ const styles = StyleSheet.create({
     gap: 8,
     marginTop: 6,
   },
-  logoMark: {
-    width: 34,
-    height: 34,
-    borderRadius: 12,
-    backgroundColor: 'rgba(96,165,250,0.14)',
-    borderWidth: 1,
-    borderColor: 'rgba(147,197,253,0.3)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
+  logoMark: { alignItems: 'center', justifyContent: 'center' },
+  logoImage: { width: 38, height: 38 },
   logoText: {
     fontSize: 22,
     fontWeight: '700',
@@ -527,6 +521,7 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(255,255,255,0.15)',
     gap: 8,
   },
+  socialDisabled: { opacity: 0.4 },
   socialText: {
     fontSize: 14,
     fontWeight: '600',

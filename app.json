@@ -1,10 +1,10 @@
 {
   "expo": {
-    "name": "apsuni-ai",
+    "name": "Apsuni",
     "slug": "apsuni-ai",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/images/icon.png",
+    "icon": "./assets/images/AL3.png",
     "scheme": "apsuniai",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
@@ -19,7 +19,7 @@
     },
     "android": {
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
+        "backgroundColor": "#FFFFFF",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
         "backgroundImage": "./assets/images/android-icon-background.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
@@ -58,7 +58,8 @@
       ],
       "@livekit/react-native-expo-plugin",
       "@config-plugins/react-native-webrtc",
-      "expo-mail-composer"
+      "expo-mail-composer",
+      "expo-audio"
     ],
     "experiments": {
       "typedRoutes": true,

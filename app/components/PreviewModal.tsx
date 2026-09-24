@@ -20,6 +20,7 @@ import {
 import { WebView } from 'react-native-webview';
 import { getApiAssetUrl, getProductImages } from '../services/api';
 
+import { friendlyError } from '../services/errors';
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
 type PreviewModalProps = {
@@ -120,7 +121,7 @@ export default function PreviewModal({ visible, productId, url, title, subtitle,
 				setShots(images.map((image) => getApiAssetUrl(image) ?? image).filter(Boolean) as string[]);
 			})
 			.catch((requestError) => {
-				if (isActive) setShotsError(requestError instanceof Error ? requestError.message : 'Could not load the screenshots.');
+				if (isActive) setShotsError(friendlyError(requestError, 'Could not load the screenshots.'));
 			})
 			.finally(() => {
 				if (isActive) setShotsLoading(false);

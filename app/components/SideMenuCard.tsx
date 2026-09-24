@@ -100,9 +100,11 @@ export default function FloatingSideCardsScreen({ visible = true, onClose }: Sid
           <TouchableOpacity
             style={[
               styles.workspaceRow,
+              styles.disabledItem,
               selectedWorkspace === 'mercedes' && styles.selectedRow,
             ]}
             activeOpacity={0.75}
+            disabled
             onPress={() => {
               setSelectedWorkspace('mercedes');
               onClose?.();
@@ -123,9 +125,11 @@ export default function FloatingSideCardsScreen({ visible = true, onClose }: Sid
           <TouchableOpacity
             style={[
               styles.workspaceRow,
+              styles.disabledItem,
               selectedWorkspace === 'sandra' && styles.selectedRow,
             ]}
             activeOpacity={0.75}
+            disabled
             onPress={() => setSelectedWorkspace('sandra')}
           >
             <View style={[styles.iconBox, { backgroundColor: '#E2E8F0' }]}>
@@ -141,9 +145,11 @@ export default function FloatingSideCardsScreen({ visible = true, onClose }: Sid
           <TouchableOpacity
             style={[
               styles.workspaceRow,
+              styles.disabledItem,
               selectedWorkspace === 'widelab' && styles.selectedRow,
             ]}
             activeOpacity={0.75}
+            disabled
             onPress={() => setSelectedWorkspace('widelab')}
           >
             <View style={[styles.iconBox, { backgroundColor: '#4F46E5' }]}>
@@ -162,9 +168,11 @@ export default function FloatingSideCardsScreen({ visible = true, onClose }: Sid
           <TouchableOpacity
             style={[
               styles.workspaceRow,
+              styles.disabledItem,
               selectedWorkspace === 'figma' && styles.selectedRow,
             ]}
             activeOpacity={0.75}
+            disabled
             onPress={() => setSelectedWorkspace('figma')}
           >
             <View style={[styles.iconBox, styles.figmaBox]}>
@@ -202,7 +210,7 @@ export default function FloatingSideCardsScreen({ visible = true, onClose }: Sid
 
           {/* Menu Items */}
           <View style={styles.menuGroup}>
-            <TouchableOpacity style={styles.menuItem} activeOpacity={0.7} onPress={() => { onClose?.(); router.push('/Screen/ApiDiagnosticsScreen'); }}>
+            <TouchableOpacity style={[styles.menuItem, styles.disabledItem]} activeOpacity={0.7} disabled onPress={() => { onClose?.(); router.push('/Screen/ApiDiagnosticsScreen'); }}>
               <Feather name="activity" size={18} color="#2563EB" />
               <Text style={styles.menuLabel}>API Diagnostics</Text>
             </TouchableOpacity>
@@ -294,6 +302,8 @@ const styles = StyleSheet.create({
     shadowRadius: 16,
     elevation: 6,
   },
+  // Shown but not tappable: greyed out until these entries are ready.
+  disabledItem: { opacity: 0.4 },
   workspaceRow: {
     flexDirection: 'row',
     alignItems: 'center',
