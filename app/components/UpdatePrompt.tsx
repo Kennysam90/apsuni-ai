@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Animated, Easing, Image, Linking, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { Feather } from '@expo/vector-icons';
-import { LinearGradient } from 'expo-linear-gradient';
+import { Animated, Easing, Image, Linking, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TouchableOpacity, View } from '../../theme/native';
+import { Feather } from '../../theme/vector-icons';
+import { LinearGradient } from '../../theme/linear-gradient';
 
 import { checkForUpdate, type AppUpdate } from '../services/appUpdate';
 
@@ -20,12 +20,12 @@ export default function UpdatePrompt() {
   useEffect(() => {
     if (Platform.OS !== 'android') return undefined;
     let active = true;
-    // Let the first screen settle before interrupting with a popup.
+    // The opening animation has just finished, so give the first screen a moment before a popup.
     const timer = setTimeout(() => {
       checkForUpdate().then((found) => {
         if (active && found) { setUpdate(found); setVisible(true); }
       });
-    }, 2500);
+    }, 800);
     return () => { active = false; clearTimeout(timer); };
   }, []);
 

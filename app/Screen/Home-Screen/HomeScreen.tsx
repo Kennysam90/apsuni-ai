@@ -9,15 +9,16 @@ import {
   Image,
   ImageBackground,
   useWindowDimensions
-} from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
+} from '../../../theme/native';
+import { LinearGradient } from '../../../theme/linear-gradient';
 import { useRouter } from 'expo-router';
+import AppBackground from '../../components/AppBackground';
 import {
   Ionicons,
   Feather,
   FontAwesome5,
   MaterialCommunityIcons,
-} from '@expo/vector-icons';
+} from '../../../theme/vector-icons';
 
 export default function AuroraHomeScreen() {
   const router = useRouter();
@@ -28,12 +29,8 @@ export default function AuroraHomeScreen() {
     <View style={styles.container}>
       <StatusBar barStyle="light-content" />
 
-      {/* Full-screen app background */}
-      <ImageBackground
-        source={require('@/assets/images/tabs-icon/app_background_full.png')}
-        style={StyleSheet.absoluteFillObject}
-        resizeMode="cover"
-      />
+      {/* Full-screen app background (dark picture, or the light one in light mode) */}
+      <AppBackground />
 
       <SafeAreaView style={{ flex: 1 }}>
         {/* Header Bar */}

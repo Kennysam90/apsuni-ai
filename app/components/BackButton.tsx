@@ -1,6 +1,6 @@
 import React from 'react';
-import { StyleSheet, TouchableOpacity, ViewStyle } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import { StyleSheet, TouchableOpacity, ViewStyle } from '../../theme/native';
+import { Ionicons } from '../../theme/vector-icons';
 import { useRouter } from 'expo-router';
 
 type BackButtonProps = {

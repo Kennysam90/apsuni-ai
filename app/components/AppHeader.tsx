@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from 'react';
-import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { Feather, FontAwesome5 } from '@expo/vector-icons';
+import { StyleSheet, Text, TouchableOpacity, View } from '../../theme/native';
+import { Feather, FontAwesome5 } from '../../theme/vector-icons';
 import { useRouter } from 'expo-router';
-import { LinearGradient } from 'expo-linear-gradient';
+import { LinearGradient } from '../../theme/linear-gradient';
 
 import BackButton from './BackButton';
 import CartDrawer from './CartDrawer';

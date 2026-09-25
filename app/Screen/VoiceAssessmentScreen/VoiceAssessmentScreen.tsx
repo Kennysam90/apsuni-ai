@@ -14,9 +14,9 @@ import {
   Dimensions,
   Platform, PermissionsAndroid, ActivityIndicator, Switch, Easing
   , Modal, FlatList
-} from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
-import { Feather, Ionicons } from '@expo/vector-icons';
+} from '../../../theme/native';
+import { LinearGradient } from '../../../theme/linear-gradient';
+import { Feather, Ionicons } from '../../../theme/vector-icons';
 import { useLocalSearchParams } from 'expo-router';
 import { ConversationProvider, useConversation } from '@elevenlabs/react-native';
 

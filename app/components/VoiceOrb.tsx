@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, forwardRef, useImperativeHandle } from 'react';
-import { View, StyleSheet } from 'react-native';
+import { View, StyleSheet } from '../../theme/native';
 import { WebView } from 'react-native-webview';
 
 const ORB_HTML = `

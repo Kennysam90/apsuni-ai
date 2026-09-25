@@ -1,4 +1,5 @@
 import { ApiError, NETWORK_MESSAGE, messageForStatus } from './errors';
+import { markLoggedIn } from './appFlags';
 import { setUserCountry } from './currency';
 
 // Production API. Override with EXPO_PUBLIC_API_URL for local development.
@@ -274,6 +275,7 @@ export async function login(email: string, password: string) {
     body: JSON.stringify({ email, password }),
   });
   setAuthTokens(tokens);
+  markLoggedIn(); // this phone has signed in, so the welcome tour is not shown again
   // Pick up the user's country so prices show in their currency straight away.
   getProfile().catch(() => undefined);
   return tokens;
@@ -402,8 +404,9 @@ export async function checkDomain(domain: string): Promise<boolean> {
 export type PickedFile = { uri: string; name: string; type: string; size?: number };
 
 /** Attaches documents to a project prompt (and removes saved ones). Sent as a form, not JSON. */
-export async function updateEditoryAttachments(editoryId: number, files: PickedFile[], removeIds: number[] = []) {
+export async function updateEditoryAttachments(editoryId: number, files: PickedFile[], removeIds: number[] = [], logo?: PickedFile | null) {
   const form = new FormData();
+  if (logo) form.append('company_logo', { uri: logo.uri, name: logo.name, type: logo.type } as any);
   files.forEach((file) => form.append('attachments', { uri: file.uri, name: file.name, type: file.type } as any));
   if (removeIds.length) form.append('remove_attachments', removeIds.join(','));
 

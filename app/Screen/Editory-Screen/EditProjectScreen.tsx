@@ -1,9 +1,10 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Feather } from '@expo/vector-icons';
+import { Feather } from '../../../theme/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import {
 	ActivityIndicator,
 	Animated,
+	Image,
 	Easing,
 	KeyboardAvoidingView,
 	Linking,
@@ -15,11 +16,12 @@ import {
 	TextInput,
 	TouchableOpacity,
 	View,
-} from 'react-native';
+} from '../../../theme/native';
+import { Image as RNImage } from 'react-native';
 import AppBackground from '../../components/AppBackground';
 import AppHeader from '../../components/AppHeader';
 import { useAppAlert } from '../../components/AppAlert';
-import { checkDomain, listEditories, updateEditory, updateEditoryAttachments, type Editory, type PickedFile } from '../../services/api';
+import { getApiAssetUrl, checkDomain, listEditories, updateEditory, updateEditoryAttachments, type Editory, type PickedFile } from '../../services/api';
 import { formatMoney } from '../../services/currency';
 
 import { friendlyError } from '../../services/errors';
@@ -387,6 +389,8 @@ export default function EditProjectScreen() {
 	const [domainState, setDomainState] = useState<DomainState>({ status: 'idle', message: '' });
 	const [savedFiles, setSavedFiles] = useState<SavedAttachment[]>([]);
 	const [pendingFiles, setPendingFiles] = useState<PickedFile[]>([]);
+	const [logoFile, setLogoFile] = useState<PickedFile | null>(null); // a new logo chosen on this screen
+	const [savedLogo, setSavedLogo] = useState<string | null>(null); // the logo already saved on the project
 	const [removedIds, setRemovedIds] = useState<number[]>([]);
 	const domainTicket = useRef(0);
 
@@ -417,6 +421,7 @@ export default function EditProjectScreen() {
 				const rawType = String(product.product_type || product.project_type || product.type || params.productType || '').trim();
 				setRawProductType(rawType);
 				setSavedFiles(Array.isArray(product.attachments) ? product.attachments.map((file: any) => ({ id: Number(file.id), name: String(file.name), size: Number(file.size) || 0, url: file.url })) : []);
+				setSavedLogo(product.company_logo ? (getApiAssetUrl(String(product.company_logo)) ?? String(product.company_logo)) : null);
 				setBaseTotal(Number(product.total_amount || product.price || params.price || 0) || 0);
 				setForm((current) => ({
 					...current,
@@ -557,6 +562,36 @@ export default function EditProjectScreen() {
 		}
 	};
 
+	// The logo box takes the logo's own shape, so the border hugs it whatever side it is wider on.
+	const [logoRatio, setLogoRatio] = useState(1);
+	const logoUri = logoFile ? logoFile.uri : savedLogo;
+	useEffect(() => { if (!logoUri) setLogoRatio(1); }, [logoUri]);
+	const logoBox = logoUri
+		? { width: logoRatio >= 1 ? 150 : Math.max(56, Math.round(110 * logoRatio)), height: logoRatio >= 1 ? Math.max(56, Math.round(150 / logoRatio)) : 110, borderStyle: 'solid' as const, padding: 6 }
+		: {};
+
+	const pickLogo = async () => {
+		let picker: any;
+		try {
+			picker = require('expo-document-picker');
+		} catch {
+			showAlert({ title: 'Update needed', message: 'Uploading a logo needs the latest version of the Apsuni app. Please update the app and try again.' });
+			return;
+		}
+		try {
+			const result = await picker.getDocumentAsync({ multiple: false, copyToCacheDirectory: true, type: 'image/*' });
+			if (result.canceled || !result.assets?.length) return;
+			const asset = result.assets[0];
+			if ((asset.size ?? 0) > MAX_ATTACHMENT_BYTES) {
+				showAlert({ title: 'Logo is too large', message: 'Please choose a picture smaller than 10 MB.' });
+				return;
+			}
+			setLogoFile({ uri: asset.uri, name: String(asset.name || 'logo.png'), type: asset.mimeType || 'image/png', size: asset.size ?? undefined });
+		} catch {
+			showAlert({ title: 'Could not open your pictures', message: 'Please try again.' });
+		}
+	};
+
 	const removeSaved = (file: SavedAttachment) => {
 		setSavedFiles((current) => current.filter((item) => item.id !== file.id));
 		setRemovedIds((current) => [...current, file.id]);
@@ -683,9 +718,9 @@ export default function EditProjectScreen() {
 			};
 
 			const result = await updateEditory(editoryId, payload);
-			if (pendingFiles.length || removedIds.length) {
+			if (pendingFiles.length || removedIds.length || logoFile) {
 				try {
-					await updateEditoryAttachments(editoryId, pendingFiles, removedIds);
+					await updateEditoryAttachments(editoryId, pendingFiles, removedIds, logoFile);
 				} catch (attachError) {
 					// The project itself saved; only the files failed, so stay here so they can be retried.
 					showAlert({ title: 'Project saved, files not uploaded', message: friendlyError(attachError, 'Your attachments could not be uploaded. Please try again.') });
@@ -833,6 +868,28 @@ export default function EditProjectScreen() {
 						{step === 1 && (
 							<>
 								<SectionCard title="Company" icon="briefcase">
+									<View style={logoStyles.row}>
+										<TouchableOpacity activeOpacity={0.8} onPress={pickLogo} accessibilityLabel="Upload company logo" style={[logoStyles.box, logoBox]}>
+											{logoFile || savedLogo ? (
+												<RNImage source={{ uri: logoUri as string }} style={logoStyles.image} resizeMode="contain" onLoad={(event) => { const { width, height } = event.nativeEvent.source; if (width > 0 && height > 0) setLogoRatio(Math.min(4, Math.max(0.25, width / height))); }} />
+											) : (
+												<Feather name="image" size={26} color="#94A3B8" />
+											)}
+										</TouchableOpacity>
+										<View style={{ flex: 1 }}>
+											<Text style={logoStyles.title}>Company logo</Text>
+											<Text style={logoStyles.hint}>{logoFile ? 'New logo ready. It is saved when you save the project.' : 'A square picture works best.'}</Text>
+											<View style={logoStyles.actions}>
+												<TouchableOpacity onPress={pickLogo} style={logoStyles.button}>
+													<Feather name="upload" size={14} color="#FFFFFF" />
+													<Text style={logoStyles.buttonText}>{logoFile || savedLogo ? 'Change logo' : 'Upload logo'}</Text>
+												</TouchableOpacity>
+												{logoFile ? (
+													<TouchableOpacity onPress={() => setLogoFile(null)} style={logoStyles.ghost}><Text style={logoStyles.ghostText}>Undo</Text></TouchableOpacity>
+												) : null}
+											</View>
+										</View>
+									</View>
 									<Field label="Company name" value={form.company} onChange={(value) => set('company', value)} placeholder="Company name" />
 									<Field label="Company is for" value={form.company_for} onChange={(value) => set('company_for', value)} placeholder="What the company does" />
 									<Field label="Company email" value={form.company_email} onChange={(value) => set('company_email', value)} placeholder="hello@company.com" keyboardType="email-address" autoCapitalize="none" />
@@ -1212,4 +1269,17 @@ const styles = StyleSheet.create({
 
 	stateContainer: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12, paddingHorizontal: 32 },
 	stateText: { fontSize: 13, color: '#94A3B8', textAlign: 'center' },
+});
+
+const logoStyles = StyleSheet.create({
+	row: { flexDirection: 'row', alignItems: 'center', gap: 14, marginBottom: 14 },
+	box: { width: 84, height: 84, borderRadius: 18, borderWidth: 1, borderStyle: 'dashed', borderColor: 'rgba(148,163,184,0.5)', backgroundColor: 'rgba(148,163,184,0.1)', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
+	image: { width: '100%', height: '100%' },
+	title: { fontSize: 15, fontWeight: '700', color: '#F8FAFC' },
+	hint: { marginTop: 3, fontSize: 12, lineHeight: 17, color: '#94A3B8' },
+	actions: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 10 },
+	button: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 14, paddingVertical: 8, borderRadius: 12, backgroundColor: '#1E40AF' },
+	buttonText: { fontSize: 13, fontWeight: '700', color: '#FFFFFF' },
+	ghost: { paddingHorizontal: 10, paddingVertical: 8 },
+	ghostText: { fontSize: 13, fontWeight: '600', color: '#94A3B8' },
 });

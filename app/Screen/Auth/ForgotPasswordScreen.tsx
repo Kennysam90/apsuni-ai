@@ -14,8 +14,8 @@ import {
   TextInputKeyPressEventData,
   TouchableOpacity,
   View,
-} from 'react-native';
-import { Ionicons, Octicons } from '@expo/vector-icons';
+} from '../../../theme/native';
+import { Ionicons, Octicons } from '../../../theme/vector-icons';
 import { useRouter } from 'expo-router';
 
 import AnimatedAuroraBackground from '../../components/AnimatedAuroraBackground';

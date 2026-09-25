@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Feather } from '@expo/vector-icons';
+import { Feather } from '../../../theme/vector-icons';
 import { useLocalSearchParams } from 'expo-router';
 import {
 	ActivityIndicator,
@@ -10,7 +10,7 @@ import {
 	Text,
 	TouchableOpacity,
 	View,
-} from 'react-native';
+} from '../../../theme/native';
 import AppBackground from '../../components/AppBackground';
 import BackButton from '../../components/BackButton';
 import {

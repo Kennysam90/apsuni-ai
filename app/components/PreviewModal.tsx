@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Feather } from '@expo/vector-icons';
+import { Feather } from '../../theme/vector-icons';
 import {
 	ActivityIndicator,
 	Animated,
@@ -16,7 +16,7 @@ import {
 	Text,
 	TouchableOpacity,
 	View,
-} from 'react-native';
+} from '../../theme/native';
 import { WebView } from 'react-native-webview';
 import { getApiAssetUrl, getProductImages } from '../services/api';
 

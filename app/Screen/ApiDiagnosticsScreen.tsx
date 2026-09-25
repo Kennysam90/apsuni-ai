@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { SafeAreaView, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { SafeAreaView, ScrollView, StyleSheet, Text, TextInput, View } from '../../theme/native';
 import { useRouter } from 'expo-router';
 import BackButton from '../components/BackButton';
 import LoadingButton from '../components/LoadingButton';

@@ -11,8 +11,8 @@ import {
   StatusBar,
   TextInput,
   Dimensions,
-} from 'react-native';
-import { Feather, FontAwesome5 } from '@expo/vector-icons';
+} from '../../../theme/native';
+import { Feather, FontAwesome5 } from '../../../theme/vector-icons';
 import { useRouter } from 'expo-router';
 import CustomTabBar from '../../components/CustomTabBar';
 import AppHeader from '../../components/AppHeader';
@@ -20,6 +20,7 @@ import AppBackground from '../../components/AppBackground';
 import PreviewModal from '../../components/PreviewModal';
 import { addEditoryToCart, createEditory, deleteBucketItem, getAccessToken, getApiAssetUrl, listEditories, searchMarketplaceProducts, type DesignResult } from '../../services/api';
 import { useCurrency } from '../../services/currency';
+import { KeepAsDrawn, ThemeAgain } from '../../../theme/ThemeContext';
 
 import { friendlyError } from '../../services/errors';
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -73,7 +74,13 @@ export default function SearchScreen() {
         const file = activeFilter === 'Figma' ? 'figma' : '';
         const responses = await Promise.all(categories.map((category) => searchMarketplaceProducts(searchQuery, category, file, page)));
         if (isMounted) {
-          const incoming = responses.flatMap((response) => response.products ?? []);
+          const unique = new Set<string>();
+          const incoming = responses.flatMap((response) => response.products ?? []).filter((item, index) => {
+            const key = String(item.id ?? item.pid ?? `i${index}`);
+            if (unique.has(key)) return false;
+            unique.add(key);
+            return true;
+          });
           // Later pages are appended to what is already shown; a new search or filter (page 1) starts over.
           setProducts((current) => {
             if (isFirstPage) return incoming;
@@ -204,94 +211,99 @@ export default function SearchScreen() {
         scrollEventThrottle={200}
       >
         {/* --- TEAMS LIST (STORY BAR) --- */}
-        <View style={styles.teamsSection}>
-          <View style={styles.teamsHeader}>
-            <View style={styles.teamsTitleGroup}>
-              <FontAwesome5 name="shopping-basket" size={17} color="#FFFFFF" />
-              <Text style={styles.teamsTitle}>My bucket</Text>
+        {/* The bucket bar keeps its dark look with white text in light mode too. */}
+        <KeepAsDrawn>
+          <View style={styles.teamsSection}>
+            <View style={styles.teamsHeader}>
+              <View style={styles.teamsTitleGroup}>
+                <FontAwesome5 name="shopping-basket" size={17} color="#FFFFFF" />
+                <Text style={styles.teamsTitle}>My bucket</Text>
+              </View>
             </View>
-          </View>
 
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.teamsScroll}>
-            {bucketProducts.map((product, index) => {
-              const bucketItemId = String(product.id ?? product.pid ?? index);
-              return (
-                <TouchableOpacity key={bucketItemId} style={styles.teamItem} onPress={() => setSelectedBucketId((current) => current === bucketItemId ? null : bucketItemId)}>
-                  {selectedBucketId === bucketItemId && (
-                    <View style={styles.bucketTooltip}>
-                      <TouchableOpacity style={styles.bucketTooltipButton} onPress={() => deleteFromBucket(product)}><Feather name="trash-2" size={14} color="#FCA5A5" /></TouchableOpacity>
-                      <TouchableOpacity style={styles.bucketTooltipButton} onPress={() => openEditor(product)}><Feather name="edit-3" size={14} color="#BFDBFE" /></TouchableOpacity>
-                      <TouchableOpacity style={styles.bucketTooltipButton} onPress={() => addBucketItemToCart(product)}><Feather name="shopping-cart" size={14} color="#86EFAC" /></TouchableOpacity>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.teamsScroll}>
+              {bucketProducts.map((product, index) => {
+                const bucketItemId = String(product.id ?? product.pid ?? index);
+                return (
+                  <TouchableOpacity key={bucketItemId} style={styles.teamItem} onPress={() => setSelectedBucketId((current) => current === bucketItemId ? null : bucketItemId)}>
+                    {selectedBucketId === bucketItemId && (
+                      <View style={styles.bucketTooltip}>
+                        <TouchableOpacity style={styles.bucketTooltipButton} onPress={() => deleteFromBucket(product)}><Feather name="trash-2" size={14} color="#FCA5A5" /></TouchableOpacity>
+                        <TouchableOpacity style={styles.bucketTooltipButton} onPress={() => openEditor(product)}><Feather name="edit-3" size={14} color="#BFDBFE" /></TouchableOpacity>
+                        <TouchableOpacity style={styles.bucketTooltipButton} onPress={() => addBucketItemToCart(product)}><Feather name="shopping-cart" size={14} color="#86EFAC" /></TouchableOpacity>
+                      </View>
+                    )}
+                    <View style={styles.avatarGradientRing}>
+                      {product.image ? <Image source={{ uri: getApiAssetUrl(product.image) ?? product.image }} style={styles.teamAvatarImg} resizeMode="contain" /> : <Feather name="image" size={20} color="#94A3B8" />}
                     </View>
-                  )}
-                  <View style={styles.avatarGradientRing}>
-                    {product.image ? <Image source={{ uri: getApiAssetUrl(product.image) ?? product.image }} style={styles.teamAvatarImg} resizeMode="contain" /> : <Feather name="image" size={20} color="#94A3B8" />}
-                  </View>
-                  <Text style={styles.teamNameText} numberOfLines={1}>
-                    {product.title || 'Untitled product'}
-                  </Text>
+                    <Text style={styles.teamNameText} numberOfLines={1}>
+                      {product.title || 'Untitled product'}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+
+            {/* View Mode Switchers: List & Column/Grid */}
+            <View style={styles.teamsViewToggleRow}>
+              <View style={styles.filterControl}>
+                <TouchableOpacity
+                  accessibilityRole="button"
+                  accessibilityLabel="Filter products"
+                  style={[styles.filterButton, activeFilter !== 'All' && styles.filterButtonActive]}
+                  onPress={() => setFilterVisible((visible) => !visible)}
+                >
+                  <Feather name="filter" size={18} color={activeFilter === 'All' ? '#94A3B8' : '#FFFFFF'} />
                 </TouchableOpacity>
-              );
-            })}
-          </ScrollView>
-
-          {/* View Mode Switchers: List & Column/Grid */}
-          <View style={styles.teamsViewToggleRow}>
-            <View style={styles.filterControl}>
-              <TouchableOpacity
-                accessibilityRole="button"
-                accessibilityLabel="Filter products"
-                style={[styles.filterButton, activeFilter !== 'All' && styles.filterButtonActive]}
-                onPress={() => setFilterVisible((visible) => !visible)}
-              >
-                <Feather name="filter" size={18} color={activeFilter === 'All' ? '#94A3B8' : '#FFFFFF'} />
-              </TouchableOpacity>
-              {filterVisible && (
-                <View style={styles.filterMenu}>
-                  {(['All', 'Mobile', 'Web'] as const).map((filter) => (
-                    <TouchableOpacity key={filter} style={[styles.filterOption, activeFilter === filter && styles.filterOptionActive]} onPress={() => updateFilter(filter)}>
-                      <Text style={styles.filterOptionText}>{filter}</Text>
-                      {activeFilter === filter && <Feather name="check" size={15} color="#60A5FA" />}
-                    </TouchableOpacity>
-                  ))}
-                </View>
-              )}
-            </View>
-            <View style={styles.searchField}>
-              <Feather name="search" size={16} color="#94A3B8" />
-              <TextInput
-                value={searchQuery}
-                onChangeText={updateSearch}
-                placeholder="Search products"
-                placeholderTextColor="#64748B"
-                style={styles.searchInput}
-              />
-            </View>
-            <View style={styles.viewToggleGroup}>
-              <TouchableOpacity
-                style={[styles.toggleBtn, viewMode === 'list' && styles.activeToggle]}
-                onPress={() => setViewMode('list')}
-              >
-                <Feather
-                  name="list"
-                  size={18}
-                  color={viewMode === 'list' ? '#FFFFFF' : '#64748B'}
+                {filterVisible && (
+                  <ThemeAgain>
+                  <View style={styles.filterMenu}>
+                    {(['All', 'Mobile', 'Web'] as const).map((filter) => (
+                      <TouchableOpacity key={filter} style={[styles.filterOption, activeFilter === filter && styles.filterOptionActive]} onPress={() => updateFilter(filter)}>
+                        <Text style={styles.filterOptionText}>{filter}</Text>
+                        {activeFilter === filter && <Feather name="check" size={15} color="#60A5FA" />}
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                  </ThemeAgain>
+                )}
+              </View>
+              <View style={styles.searchField}>
+                <Feather name="search" size={16} color="#94A3B8" />
+                <TextInput
+                  value={searchQuery}
+                  onChangeText={updateSearch}
+                  placeholder="Search products"
+                  placeholderTextColor="#64748B"
+                  style={styles.searchInput}
                 />
-              </TouchableOpacity>
+              </View>
+              <View style={styles.viewToggleGroup}>
+                <TouchableOpacity
+                  style={[styles.toggleBtn, viewMode === 'list' && styles.activeToggle]}
+                  onPress={() => setViewMode('list')}
+                >
+                  <Feather
+                    name="list"
+                    size={18}
+                    color={viewMode === 'list' ? '#FFFFFF' : '#64748B'}
+                  />
+                </TouchableOpacity>
 
-              <TouchableOpacity
-                style={[styles.toggleBtn, viewMode === 'grid' && styles.activeToggle]}
-                onPress={() => setViewMode('grid')}
-              >
-                <Feather
-                  name="grid"
-                  size={18}
-                  color={viewMode === 'grid' ? '#FFFFFF' : '#64748B'}
-                />
-              </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.toggleBtn, viewMode === 'grid' && styles.activeToggle]}
+                  onPress={() => setViewMode('grid')}
+                >
+                  <Feather
+                    name="grid"
+                    size={18}
+                    color={viewMode === 'grid' ? '#FFFFFF' : '#64748B'}
+                  />
+                </TouchableOpacity>
+              </View>
             </View>
           </View>
-        </View>
+        </KeepAsDrawn>
 
         <View style={styles.divider} />
 
@@ -357,8 +369,9 @@ export default function SearchScreen() {
           /* GRID / COLUMN VIEW */
           <View style={styles.gridContainer}>
             {products.map((product, index) => (
-              <View key={String(product.id ?? product.pid ?? index)} style={styles.gridCard}>
-                {product.image ? <Image source={{ uri: getApiAssetUrl(product.image) ?? product.image }} style={styles.gridImage} resizeMode="contain" /> : <View style={styles.productImagePlaceholder}><Feather name="image" size={24} color="#94A3B8" /></View>}
+              <KeepAsDrawn key={String(product.id ?? product.pid ?? index)}>
+              <View style={styles.gridCard}>
+                {product.image ? <Image source={{ uri: getApiAssetUrl(product.image) ?? product.image }} style={styles.gridImage} resizeMode="cover" /> : <View style={styles.productImagePlaceholder}><Feather name="image" size={24} color="#94A3B8" /></View>}
                 <View style={styles.gridOverlay}>
                   <View style={styles.gridOverlayRow}>
                     <View style={styles.gridCopy}>
@@ -372,6 +385,7 @@ export default function SearchScreen() {
                   </View>
                 </View>
               </View>
+              </KeepAsDrawn>
             ))}
           </View>
         )}
@@ -730,13 +744,16 @@ const styles = StyleSheet.create({
   gridContainer: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    padding: 8,
-    gap: 8,
+    paddingHorizontal: 12,
+    paddingTop: 12,
+    gap: 10,
   },
   gridCard: {
-    width: (SCREEN_WIDTH - 24) / 2,
-    height: 200,
+    width: (SCREEN_WIDTH - 24 - 10) / 2,
+    height: 148,
+    borderRadius: 14,
     overflow: 'hidden',
+    backgroundColor: '#111A28',
   },
   gridImage: {
     width: '100%',

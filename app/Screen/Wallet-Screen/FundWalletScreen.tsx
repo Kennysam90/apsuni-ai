@@ -1,7 +1,7 @@
 import React, { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Feather } from '@expo/vector-icons';
+import { Feather } from '../../../theme/vector-icons';
 import * as Haptics from 'expo-haptics';
-import { LinearGradient } from 'expo-linear-gradient';
+import { LinearGradient } from '../../../theme/linear-gradient';
 import {
 	ActivityIndicator,
 	Animated,
@@ -19,7 +19,7 @@ import {
 	TextInput,
 	TouchableOpacity,
 	View,
-} from 'react-native';
+} from '../../../theme/native';
 import { WebView } from 'react-native-webview';
 import AppBackground from '../../components/AppBackground';
 import AppHeader from '../../components/AppHeader';

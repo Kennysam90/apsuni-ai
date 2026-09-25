@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, FlatList, Pressable, RefreshControl, StyleSheet, Text, View } from 'react-native';
-import { Feather } from '@expo/vector-icons';
+import { ActivityIndicator, FlatList, Pressable, RefreshControl, StyleSheet, Text, View } from '../../theme/native';
+import { Feather } from '../../theme/vector-icons';
 import { useRouter } from 'expo-router';
 import { getConversationHistory, type ConversationHistoryItem } from '../services/api';
 import AppBackground from '../components/AppBackground';

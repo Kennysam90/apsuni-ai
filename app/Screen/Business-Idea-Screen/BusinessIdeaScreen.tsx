@@ -1,8 +1,8 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Feather } from '@expo/vector-icons';
+import { Feather } from '../../../theme/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { requireOptionalNativeModule } from 'expo-modules-core';
-import { LinearGradient } from 'expo-linear-gradient';
+import { LinearGradient } from '../../../theme/linear-gradient';
 import type * as FileSystemModule from 'expo-file-system';
 import type * as MailComposerModule from 'expo-mail-composer';
 import type * as SharingModule from 'expo-sharing';
@@ -20,7 +20,7 @@ import {
 	TextInput,
 	TouchableOpacity,
 	View,
-} from 'react-native';
+} from '../../../theme/native';
 import AppBackground from '../../components/AppBackground';
 import AppHeader from '../../components/AppHeader';
 import { getBusinessSuggestions, getProfile, sendAssistantMessage } from '../../services/api';

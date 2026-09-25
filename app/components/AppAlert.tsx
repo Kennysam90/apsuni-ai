@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useMemo, useState } from 'react';
-import { Modal, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { Feather } from '@expo/vector-icons';
+import { Modal, StyleSheet, Text, TouchableOpacity, View } from '../../theme/native';
+import { Feather } from '../../theme/vector-icons';
 
 type AlertOptions = { title?: string; message: string; actionLabel?: string };
 type AlertContextValue = { showAlert: (options: AlertOptions | string) => void };

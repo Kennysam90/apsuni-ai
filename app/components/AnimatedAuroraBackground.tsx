@@ -1,6 +1,6 @@
 import React, { useEffect, useRef } from 'react';
-import { Animated, StyleSheet, View } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
+import { Animated, StyleSheet, View } from '../../theme/native';
+import { LinearGradient } from '../../theme/linear-gradient';
 
 export default function AnimatedAuroraBackground() {
   const drift = useRef(new Animated.Value(0)).current;

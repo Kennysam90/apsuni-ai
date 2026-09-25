@@ -9,9 +9,9 @@ import {
   StatusBar,
   ScrollView,
   ActivityIndicator,
-} from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
-import { Feather } from '@expo/vector-icons';
+} from '../../../theme/native';
+import { LinearGradient } from '../../../theme/linear-gradient';
+import { Feather } from '../../../theme/vector-icons';
 import BackButton from '../../components/BackButton';
 import { useAppAlert } from '../../components/AppAlert';
 

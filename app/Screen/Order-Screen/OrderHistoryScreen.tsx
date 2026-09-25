@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Feather, FontAwesome5 } from '@expo/vector-icons';
+import { Feather, FontAwesome5 } from '../../../theme/vector-icons';
 import { useRouter } from 'expo-router';
 import {
 	ActivityIndicator,
@@ -13,7 +13,7 @@ import {
 	TextInput,
 	TouchableOpacity,
 	View,
-} from 'react-native';
+} from '../../../theme/native';
 import AppBackground from '../../components/AppBackground';
 import AppHeader from '../../components/AppHeader';
 import { useAppAlert } from '../../components/AppAlert';

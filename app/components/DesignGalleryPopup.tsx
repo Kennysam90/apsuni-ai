@@ -11,7 +11,7 @@ import {
   StyleSheet,
   Text,
   View,
-} from 'react-native';
+} from '../../theme/native';
 import {
   ChevronLeft,
   ChevronRight,

@@ -1,5 +1,5 @@
 import React from 'react';
-import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, TouchableOpacityProps } from 'react-native';
+import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, TouchableOpacityProps } from '../../theme/native';
 
 type LoadingButtonProps = TouchableOpacityProps & { loading?: boolean; label: string; color?: string };
 

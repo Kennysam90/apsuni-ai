@@ -9,12 +9,14 @@ import {
   StatusBar,
   Animated,
   Easing,
-} from 'react-native';
+} from '../../theme/native';
 import {
   Feather,
   MaterialCommunityIcons,
-} from '@expo/vector-icons';
+} from '../../theme/vector-icons';
 import { useRouter } from 'expo-router';
+import ThemeToggle from './ThemeToggle';
+import { useTheme } from '../../theme/ThemeContext';
 import { getAccessToken, getApiAssetUrl, getProfile, logout, type UserProfile } from '../services/api';
 
 interface SideMenuCardProps {
@@ -24,6 +26,7 @@ interface SideMenuCardProps {
 
 export default function FloatingSideCardsScreen({ visible = true, onClose }: SideMenuCardProps) {
   const router = useRouter();
+  const { isDark } = useTheme();
   const [selectedWorkspace, setSelectedWorkspace] = useState('widelab');
   const [mounted, setMounted] = useState(visible);
   const slideX = React.useRef(new Animated.Value(-390)).current;
@@ -210,10 +213,15 @@ export default function FloatingSideCardsScreen({ visible = true, onClose }: Sid
 
           {/* Menu Items */}
           <View style={styles.menuGroup}>
-            <TouchableOpacity style={[styles.menuItem, styles.disabledItem]} activeOpacity={0.7} disabled onPress={() => { onClose?.(); router.push('/Screen/ApiDiagnosticsScreen'); }}>
-              <Feather name="activity" size={18} color="#2563EB" />
-              <Text style={styles.menuLabel}>API Diagnostics</Text>
-            </TouchableOpacity>
+            {/* Light / dark switch: dark keeps the app's usual background, light swaps it for a light one everywhere. */}
+            <View style={[styles.menuItem, styles.themeRow]}>
+              <View style={styles.themeLabelGroup}>
+                <Feather name={isDark ? 'moon' : 'sun'} size={18} color={isDark ? '#6366F1' : '#F59E0B'} />
+                <Text style={styles.menuLabel}>{isDark ? 'Dark mode' : 'Light mode'}</Text>
+              </View>
+              <ThemeToggle />
+            </View>
+
 
           
 
@@ -376,6 +384,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
     borderRadius: 10,
     padding: 16,
+    marginTop: 20,
     shadowColor: '#000000',
     shadowOffset: { width: 0, height: 6 },
     shadowOpacity: 0.08,
@@ -435,6 +444,8 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     gap: 12,
   },
+  themeRow: { justifyContent: 'space-between' },
+  themeLabelGroup: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   menuLabel: {
     fontSize: 15,
     fontWeight: '500',

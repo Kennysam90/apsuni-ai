@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { Feather, Ionicons } from '@expo/vector-icons';
-import { LinearGradient } from 'expo-linear-gradient';
+import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, View } from '../../theme/native';
+import { Feather, Ionicons } from '../../theme/vector-icons';
+import { LinearGradient } from '../../theme/linear-gradient';
 
 import { listWallets } from '../services/api';
 import { formatMoney, useCurrency } from '../services/currency';

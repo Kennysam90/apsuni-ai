@@ -11,8 +11,8 @@ import {
   StatusBar,
   Dimensions,
   TextInput,
-} from 'react-native';
-import { Feather, FontAwesome5 } from '@expo/vector-icons';
+} from '../../../theme/native';
+import { Feather, FontAwesome5 } from '../../../theme/vector-icons';
 import CustomTabBar from '../../components/CustomTabBar';
 import AppHeader from '../../components/AppHeader';
 import AppBackground from '../../components/AppBackground';

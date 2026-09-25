@@ -17,8 +17,8 @@ import {
   Easing,
   Dimensions,
   FlatList,
-} from 'react-native';
-import { Ionicons, FontAwesome5, Octicons, Feather } from '@expo/vector-icons';
+} from '../../../theme/native';
+import { Ionicons, FontAwesome5, Octicons, Feather } from '../../../theme/vector-icons';
 import { useRouter } from 'expo-router';
 import BackButton from '../../components/BackButton';
 import AnimatedAuroraBackground from '../../components/AnimatedAuroraBackground';
@@ -28,6 +28,7 @@ import { sendSignupOtp } from '../../services/api';
 import { COUNTRIES, countryFlag, type Country } from '../../services/currency';
 
 import { friendlyError } from '../../services/errors';
+import { useTheme } from '../../../theme/ThemeContext';
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
 const TERMS_UPDATED = 'September 2026';
@@ -106,6 +107,7 @@ function Sheet({ visible, onClose, children, height }: { visible: boolean; onClo
 }
 
 export default function SignUpScreen() {
+  const { isDark } = useTheme();
   const router = useRouter();
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
@@ -208,8 +210,7 @@ export default function SignUpScreen() {
 
             {/* Logo */}
             <View style={styles.logoRow}>
-              <View style={styles.logoMark}><Image source={require('../../../assets/images/AL3.png')} style={styles.logoImage} resizeMode="contain" /></View>
-              <Text style={styles.logoText}>Apsuni</Text>
+              <Image source={isDark ? require('../../../assets/images/APlogo5-light.png') : require('../../../assets/images/APlogo5.png')} style={styles.brandLogo} resizeMode="contain" />
             </View>
 
             <Text style={styles.title}>Create Account</Text>
@@ -476,6 +477,7 @@ const styles = StyleSheet.create({
   },
   logoMark: { alignItems: 'center', justifyContent: 'center' },
   logoImage: { width: 38, height: 38 },
+  brandLogo: { width: 96, height: 30 },
   logoText: {
     fontSize: 22,
     fontWeight: '700',

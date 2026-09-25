@@ -11,8 +11,8 @@ import {
   StatusBar,
   KeyboardAvoidingView,
   Platform,
-} from 'react-native';
-import { Ionicons, FontAwesome5, Octicons } from '@expo/vector-icons';
+} from '../../../theme/native';
+import { Ionicons, FontAwesome5, Octicons } from '../../../theme/vector-icons';
 import { useRouter } from 'expo-router';
 import BackButton from '../../components/BackButton';
 import AnimatedAuroraBackground from '../../components/AnimatedAuroraBackground';
@@ -21,7 +21,9 @@ import LoadingButton from '../../components/LoadingButton';
 import { useAppAlert } from '../../components/AppAlert';
 
 import { friendlyError } from '../../services/errors';
+import { useTheme } from '../../../theme/ThemeContext';
 export default function SignInScreen() {
+  const { isDark } = useTheme();
   const router = useRouter();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -65,8 +67,7 @@ export default function SignInScreen() {
 
             {/* Logo */}
             <View style={styles.logoRow}>
-              <View style={styles.logoMark}><Image source={require('../../../assets/images/AL3.png')} style={styles.logoImage} resizeMode="contain" /></View>
-              <Text style={styles.logoText}>Apsuni</Text>
+              <Image source={isDark ? require('../../../assets/images/APlogo5-light.png') : require('../../../assets/images/APlogo5.png')} style={styles.brandLogo} resizeMode="contain" />
             </View>
 
             <Text style={styles.title}>Welcome to Apsuni</Text>
@@ -180,6 +181,7 @@ const styles = StyleSheet.create({
   },
   logoMark: { alignItems: 'center', justifyContent: 'center' },
   logoImage: { width: 38, height: 38 },
+  brandLogo: { width: 96, height: 30 },
   logoText: {
     fontSize: 22,
     fontWeight: '700',

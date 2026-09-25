@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, RefreshControl, SafeAreaView, SectionList, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { Feather } from '@expo/vector-icons';
+import { ActivityIndicator, RefreshControl, SafeAreaView, SectionList, StyleSheet, Text, TouchableOpacity, View } from '../../theme/native';
+import { Feather } from '../../theme/vector-icons';
 
 import AppBackground from '../components/AppBackground';
 import AppHeader from '../components/AppHeader';

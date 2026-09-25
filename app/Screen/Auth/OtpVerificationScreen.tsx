@@ -11,8 +11,8 @@ import {
   StatusBar,
   Dimensions,
   ActivityIndicator,
-} from 'react-native';
-import { Ionicons, MaterialIcons } from '@expo/vector-icons';
+} from '../../../theme/native';
+import { Ionicons, MaterialIcons } from '../../../theme/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import BackButton from '../../components/BackButton';
 import AnimatedAuroraBackground from '../../components/AnimatedAuroraBackground';

@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Animated, Dimensions, Easing, Image, Modal, Pressable, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { Feather } from '@expo/vector-icons';
+import { ActivityIndicator, Animated, Dimensions, Easing, Image, Modal, Pressable, ScrollView, StyleSheet, Text, TouchableOpacity, View } from '../../theme/native';
+import { Feather } from '../../theme/vector-icons';
 
 import { getApiAssetUrl, listWallets, payCartWithWallet, viewCart } from '../services/api';
 import { formatMoney } from '../services/currency';

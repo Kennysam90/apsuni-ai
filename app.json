@@ -2,7 +2,7 @@
   "expo": {
     "name": "Apsuni",
     "slug": "apsuni-ai",
-    "version": "1.0.0",
+    "version": "1.0.2",
     "orientation": "portrait",
     "icon": "./assets/images/AL3.png",
     "scheme": "apsuniai",
@@ -18,6 +18,7 @@
       "bitcode": false
     },
     "android": {
+      "allowBackup": false,
       "adaptiveIcon": {
         "backgroundColor": "#FFFFFF",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
@@ -50,9 +51,9 @@
           "image": "./assets/images/splash-icon.png",
           "imageWidth": 200,
           "resizeMode": "contain",
-          "backgroundColor": "#ffffff",
+          "backgroundColor": "#0a1018",
           "dark": {
-            "backgroundColor": "#000000"
+            "backgroundColor": "#0a1018"
           }
         }
       ],

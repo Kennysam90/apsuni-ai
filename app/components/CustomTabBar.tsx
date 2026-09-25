@@ -8,10 +8,11 @@ import {
   ImageSourcePropType,
   StyleProp,
   ViewStyle,
-} from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
+} from '../../theme/native';
+import { LinearGradient } from '../../theme/linear-gradient';
 import { usePathname, useRouter } from 'expo-router';
 import SideMenuCard from './SideMenuCard';
+import { KeepAsDrawn, useTheme } from '../../theme/ThemeContext';
 
 const { width } = Dimensions.get('window');
 
@@ -78,6 +79,8 @@ export default function CustomTabBar({
   navigation,
 }: CustomTabBarProps) {
   const router = useRouter();
+  const { isDark } = useTheme();
+  const iconTint = isDark ? undefined : '#334155'; // the icons are white pictures, so on the light bar they are tinted dark
   const pathname = usePathname();
   const [isSideMenuVisible, setIsSideMenuVisible] = useState(false);
   const activeRouteName = state?.routes[state.index]?.name ?? pathname;
@@ -132,6 +135,7 @@ export default function CustomTabBar({
           <Image
             source={require('@/assets/images/tabs-icon/home.png')}
             style={styles.homeIcon}
+            tintColor={iconTint}
             resizeMode="contain"
           />
         </Pressable>
@@ -144,17 +148,20 @@ export default function CustomTabBar({
           <Image
             source={require('@/assets/images/tabs-icon/menu (1).png')}
             style={styles.gridIcon}
+            tintColor={iconTint}
             resizeMode="contain"
           />
         </Pressable>
 
         {/* CENTER */}
-        <CenterButton
-          style={isVoiceActive && styles.activeCenterWrapper}
-          onPress={() => {
-            router.push('/Screen/VoiceAssessmentScreen/VoiceAssessmentScreen');
-          }}
-        />
+        <KeepAsDrawn>
+          <CenterButton
+            style={isVoiceActive && styles.activeCenterWrapper}
+            onPress={() => {
+              router.push('/Screen/VoiceAssessmentScreen/VoiceAssessmentScreen');
+            }}
+          />
+        </KeepAsDrawn>
 
         {/* SEARCH */}
         <Pressable
@@ -164,6 +171,7 @@ export default function CustomTabBar({
           <Image
             source={require('@/assets/images/tabs-icon/search.png')}
             style={styles.searchIcon}
+            tintColor={iconTint}
             resizeMode="contain"
           />
         </Pressable>
@@ -176,6 +184,7 @@ export default function CustomTabBar({
           <Image
             source={require('@/assets/images/tabs-icon/menu.png')}
             style={styles.menuIcon}
+            tintColor={iconTint}
             resizeMode="contain"
           />
         </Pressable>
