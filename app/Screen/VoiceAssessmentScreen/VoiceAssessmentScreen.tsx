@@ -585,6 +585,7 @@ function VoiceAssessmentScreenInner({
       <SafeAreaView style={styles.safeArea}>
         {/* HEADER */}
         <AppHeader
+          hideBack
           onBack={onBack}
           onCart={openCart}
           onNotification={() => showAlert('You have no new notifications.')}

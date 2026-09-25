@@ -20,7 +20,6 @@ import {
 } from '../../../theme/native';
 import { Ionicons, FontAwesome5, Octicons, Feather } from '../../../theme/vector-icons';
 import { useRouter } from 'expo-router';
-import BackButton from '../../components/BackButton';
 import AnimatedAuroraBackground from '../../components/AnimatedAuroraBackground';
 import LoadingButton from '../../components/LoadingButton';
 import { useAppAlert } from '../../components/AppAlert';
@@ -204,7 +203,6 @@ export default function SignUpScreen() {
           <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
             {/* Header */}
             <View style={styles.header}>
-              <BackButton />
               <View style={{ width: 36 }} />
             </View>
 

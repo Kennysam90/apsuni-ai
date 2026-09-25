@@ -19,7 +19,6 @@ import { Ionicons, Octicons } from '../../../theme/vector-icons';
 import { useRouter } from 'expo-router';
 
 import AnimatedAuroraBackground from '../../components/AnimatedAuroraBackground';
-import BackButton from '../../components/BackButton';
 import LoadingButton from '../../components/LoadingButton';
 import { useAppAlert } from '../../components/AppAlert';
 import { resetPassword, sendResetPasswordOtp, verifyResetPasswordOtp } from '../../services/api';
@@ -222,7 +221,6 @@ export default function ForgotPasswordScreen() {
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
           <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
             <View style={styles.header}>
-              <BackButton onBack={step === 2 || step === 3 ? () => { setError(''); setStep(step === 3 ? 2 : 1); } : undefined} />
               <View style={{ width: 36 }} />
             </View>
 

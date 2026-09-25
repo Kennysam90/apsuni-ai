@@ -14,7 +14,6 @@ import {
 } from '../../../theme/native';
 import { Ionicons, FontAwesome5, Octicons } from '../../../theme/vector-icons';
 import { useRouter } from 'expo-router';
-import BackButton from '../../components/BackButton';
 import AnimatedAuroraBackground from '../../components/AnimatedAuroraBackground';
 import { login } from '../../services/api';
 import LoadingButton from '../../components/LoadingButton';
@@ -61,7 +60,6 @@ export default function SignInScreen() {
           <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
             {/* Header */}
             <View style={styles.header}>
-              <BackButton />
               <View style={{ width: 36 }} />
             </View>
 

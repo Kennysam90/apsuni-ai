@@ -108,7 +108,7 @@ export default function ProjectsFeedScreen() {
       <SafeAreaView style={styles.container}>
         <StatusBar barStyle="light-content" backgroundColor="#000000" />
 
-      <AppHeader/>
+      <AppHeader hideBack />
 
       <ScrollView
         showsVerticalScrollIndicator={false}

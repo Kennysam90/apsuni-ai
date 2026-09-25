@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   StyleSheet,
   View,
@@ -13,6 +13,7 @@ import {
 import { LinearGradient } from '../../../theme/linear-gradient';
 import { useRouter } from 'expo-router';
 import AppBackground from '../../components/AppBackground';
+import { getApiAssetUrl, getProfile } from '../../services/api';
 import {
   Ionicons,
   Feather,
@@ -24,6 +25,16 @@ export default function AuroraHomeScreen() {
   const router = useRouter();
   const { height } = useWindowDimensions();
   const isCompactScreen = height < 760;
+
+  // The signed-in user's own picture, shown in the header.
+  const [profileImage, setProfileImage] = useState<string | null>(null);
+  useEffect(() => {
+    let live = true;
+    getProfile()
+      .then((profile) => { if (live && profile.image) setProfileImage(getApiAssetUrl(profile.image) ?? profile.image); })
+      .catch(() => undefined);
+    return () => { live = false; };
+  }, []);
 
   return (
     <View style={styles.container}>
@@ -37,14 +48,15 @@ export default function AuroraHomeScreen() {
         <View style={[styles.header, isCompactScreen && styles.compactHeader]}>
           <View style={styles.brandRow}>
             <View style={styles.logoBadge}>
-              <Image
-                 source={{
-                  uri: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?q=80&w=300&auto=format&fit=crop',
-                   }}
-                  style={styles.profileImage}
-              />
+              {profileImage ? (
+                <Image source={{ uri: profileImage }} style={styles.profileImage} />
+              ) : (
+                <View style={[styles.profileImage, { alignItems: 'center', justifyContent: 'center' }]}>
+                  <Feather name="user" size={22} color="#9D174D" />
+                </View>
+              )}
             </View>
-            <Text style={styles.brandTitle}>Apsuni AI</Text>
+            <Text style={styles.brandTitle}>Apsuni</Text>
           </View>
 
           {/* Pro Pill Button */}
@@ -102,7 +114,7 @@ export default function AuroraHomeScreen() {
               isCompactScreen && styles.compactHeroTextSection,
             ]}
           >
-            <Text style={styles.mainTitle}>Hello I’m Apsuni Ai</Text>
+            <Text style={styles.mainTitle}>Hello I’m Apsuni</Text>
             <Text style={styles.mainSubtitle}>Your AI digital partners</Text>
           </View>
 

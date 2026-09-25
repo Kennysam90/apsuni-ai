@@ -14,7 +14,6 @@ import {
 } from '../../../theme/native';
 import { Ionicons, MaterialIcons } from '../../../theme/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import BackButton from '../../components/BackButton';
 import AnimatedAuroraBackground from '../../components/AnimatedAuroraBackground';
 import LoadingButton from '../../components/LoadingButton';
 import { useAppAlert } from '../../components/AppAlert';
@@ -178,7 +177,6 @@ export default function OtpVerificationScreen() {
         <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
           {/* Header */}
           <View style={styles.header}>
-            <BackButton />
 
             <Text style={styles.otpHeaderTitle}>Verify OTP</Text>
 
@@ -272,6 +270,13 @@ export default function OtpVerificationScreen() {
               style={styles.primaryBtn}
               onPress={handleVerify}
             />
+
+            <View style={styles.bottomRow}>
+              <Text style={styles.bottomText}>Already verified? </Text>
+              <TouchableOpacity onPress={() => router.replace('/Screen/Auth/SignInScreen')}>
+                <Text style={styles.bottomLink}>Sign In</Text>
+              </TouchableOpacity>
+            </View>
           </View>
         </ScrollView>
       </SafeAreaView>
@@ -443,6 +448,9 @@ const styles = StyleSheet.create({
   resendBtnTextDisabled: {
     color: '#475569',
   },
+  bottomRow: { flexDirection: 'row', justifyContent: 'center', marginTop: 18 },
+  bottomText: { fontSize: 13, color: '#94A3B8' },
+  bottomLink: { fontSize: 13, color: '#3B82F6', fontWeight: '700' },
   primaryBtn: {
     backgroundColor: '#0066FF',
     height: 50,

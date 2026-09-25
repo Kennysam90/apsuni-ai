@@ -10,9 +10,9 @@ import WalletPicker from './WalletPicker';
 import { subscribeToCartCount, viewCart } from '../services/api';
 import { subscribeToUnreadNotifications } from '../services/notificationCenter';
 
-type AppHeaderProps = { onBack?: () => void; onCart?: () => void; onNotification?: () => void; title?: string };
+type AppHeaderProps = { onBack?: () => void; onCart?: () => void; onNotification?: () => void; title?: string; hideBack?: boolean };
 
-export default function AppHeader({ onBack, onCart, onNotification, title }: AppHeaderProps) {
+export default function AppHeader({ onBack, onCart, onNotification, title, hideBack }: AppHeaderProps) {
   const router = useRouter();
   const [cartVisible, setCartVisible] = useState(false);
   const [cartCount, setCartCount] = useState(0);
@@ -29,7 +29,7 @@ export default function AppHeader({ onBack, onCart, onNotification, title }: App
   return <>
     <View style={styles.header}>
       <View style={styles.headerLeftActions}>
-        <BackButton onBack={onBack} />
+        {!hideBack && <BackButton onBack={onBack} />}
         <TouchableOpacity accessibilityRole="button" accessibilityLabel="Notifications" activeOpacity={0.75} style={styles.headerIconButton} onPress={() => onNotification ? onNotification() : router.push('/Screen/NotificationsScreen')}><Feather name="bell" size={20} color="#FFFFFF" />{unreadCount > 0 && <View style={styles.cartBadge}><Text style={styles.cartBadgeText}>{unreadCount > 99 ? '99+' : unreadCount}</Text></View>}</TouchableOpacity>
       </View>
       <View style={styles.headerRightActions}>
