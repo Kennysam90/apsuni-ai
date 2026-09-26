@@ -322,7 +322,7 @@ export default function SearchScreen() {
           </View>
         ) : viewMode === 'list' ? (
           products.map((product, index) => {
-            const description = String(product.description ?? product.category ?? 'Marketplace product').replace(/<[^>]*>/g, '').trim();
+            const description = String(product.description || 'Marketplace product').replace(/<[^>]*>/g, '').trim();
 
             return (
             <View key={String(product.id ?? product.pid ?? index)} style={styles.projectCard}>
@@ -376,7 +376,6 @@ export default function SearchScreen() {
                   <View style={styles.gridOverlayRow}>
                     <View style={styles.gridCopy}>
                       <Text style={styles.gridTitle} numberOfLines={1}>{product.title || 'Untitled product'}</Text>
-                      <Text style={styles.gridSub} numberOfLines={1}>{product.category || 'Product'}</Text>
                     </View>
                     <View style={styles.gridActions}>
                       <TouchableOpacity style={styles.gridActionButton} onPress={() => openPreview(product)} accessibilityLabel="Preview product"><Feather name="eye" size={16} color="#FFFFFF" /></TouchableOpacity>

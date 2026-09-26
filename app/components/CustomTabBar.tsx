@@ -242,8 +242,8 @@ const styles = StyleSheet.create({
   },
 
   tabItem: {
-    width: 60,
-    height: 60,
+    width: 50,
+    height: 50,
 
     alignItems: 'center',
     justifyContent: 'center',
@@ -264,7 +264,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-
   activeCenterWrapper: {
     transform: [{ scale: 1.06 }],
   },
@@ -274,8 +273,8 @@ const styles = StyleSheet.create({
   },
 
   gradientRing: {
-    width: 68,
-    height: 68,
+    width: 55,
+    height: 55,
 
     borderRadius: 34,
 

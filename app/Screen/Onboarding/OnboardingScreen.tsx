@@ -16,8 +16,17 @@ import { KeepAsDrawn } from '../../../theme/ThemeContext';
  */
 
 const { width: W, height: H } = Dimensions.get('window');
-const HERO = Math.min(Math.round(H * 0.5), 420);
-const CENTER_Y = HERO / 2 + 46;
+
+// Everything is laid out from the screen size, so the tour fits a small phone, a tall phone and a tablet.
+// The picture is drawn 292 wide and scaled to whatever room is left above the text and the button.
+const TOP_SAFE = (StatusBar.currentHeight ?? 30) + 56; // room for the logo and Skip
+const SHORT = H < 700; // small phones get a tighter layout
+const BOTTOM_GAP = SHORT ? 36 : 72;
+const TEXT_ROOM = SHORT ? 380 : 450; // the headline, the line under it and the bottom controls
+const HERO_SCALE = Math.max(0.4, Math.min(1.3, (H - TOP_SAFE - TEXT_ROOM) / 292, W / 320));
+const CENTER_Y = TOP_SAFE + 146 * HERO_SCALE + 8;
+const TEXT_TOP = CENTER_Y + 146 * HERO_SCALE + 18;
+const TYPE = Math.max(0.8, Math.min(1.25, W / 390, H / 760)); // text grows a little on big screens and eases on small ones
 const AnimatedScrollView = Animated.ScrollView;
 
 type Icon = keyof typeof Feather.glyphMap;
@@ -386,8 +395,8 @@ function Onboarding() {
       >
         {PAGES.map((slide, index) => (
           <View key={`${slide.key}-${index}`} style={{ width: W, height: H }}>
-            <Animated.View style={{ height: HERO + 40, opacity: intro, transform: [{ translateY: intro.interpolate({ inputRange: [0, 1], outputRange: [30, 0] }) }] }}>
-              <View style={{ position: 'absolute', left: 0, right: 0, top: CENTER_Y - 146, height: 292, alignItems: 'center', justifyContent: 'center' }}>
+            <Animated.View style={{ height: CENTER_Y + 146, opacity: intro, transform: [{ translateY: intro.interpolate({ inputRange: [0, 1], outputRange: [30, 0] }) }] }}>
+              <View style={{ position: 'absolute', left: 0, right: 0, top: CENTER_Y - 146, height: 292, alignItems: 'center', justifyContent: 'center', transform: [{ scale: HERO_SCALE }] }}>
                 <Hero slide={slide} index={index} scrollX={scrollX} ambient={ambient} />
               </View>
             </Animated.View>
@@ -395,14 +404,17 @@ function Onboarding() {
             <View style={styles.textBlock}>
               <Animated.View style={[styles.eyebrow, { borderColor: `${slide.colors[1]}55`, backgroundColor: `${slide.colors[0]}22`, opacity: across(scrollX, index, [0, 1, 0], 0.5), transform: [{ translateY: across(scrollX, index, [22, 0, 22], 0.6) }] }]}>
                 <View style={[styles.eyebrowDot, { backgroundColor: slide.colors[1] }]} />
-                <Text style={[styles.eyebrowText, { color: slide.colors[1] }]}>{slide.eyebrow}</Text>
+                <Text allowFontScaling={false} style={[styles.eyebrowText, { color: slide.colors[1] }]}>{slide.eyebrow}</Text>
               </Animated.View>
               <Animated.Text
+                allowFontScaling={false}
                 style={[styles.title, { opacity: across(scrollX, index, [0, 1, 0], 0.55), transform: [{ translateY: across(scrollX, index, [34, 0, 34], 0.6) }] }]}
               >
                 {slide.title}{'\n'}<Text style={{ color: slide.colors[1] }}>{slide.highlight}</Text>
               </Animated.Text>
               <Animated.Text
+                allowFontScaling={false}
+                numberOfLines={4}
                 style={[styles.subtitle, { opacity: across(scrollX, index, [0, 1, 0], 0.4), transform: [{ translateY: across(scrollX, index, [46, 0, 46], 0.5) }] }]}
               >
                 {slide.text}
@@ -440,12 +452,12 @@ function Onboarding() {
         {/* only the last page has the Get started button; it fades in as that page slides into view */}
         <Animated.View
           pointerEvents={page === LAST ? 'auto' : 'none'}
-          style={{ alignSelf: 'center', width: Math.min(W - 48, 240), marginTop: 14, opacity: across(scrollX, LAST, [0, 1, 0]), transform: [{ scale: press }, { translateY: across(scrollX, LAST, [24, 0, 24]) }] }}
+          style={{ alignSelf: 'center', width: Math.min(W - 48, 200), marginTop: 14, opacity: across(scrollX, LAST, [0, 1, 0]), transform: [{ scale: press }, { translateY: across(scrollX, LAST, [24, 0, 24]) }] }}
         >
           <Pressable onPress={finish} onPressIn={buttonDown} onPressOut={buttonUp} accessibilityRole="button" accessibilityLabel="Get started">
             <LinearGradient colors={['#1E40AF', '#172554']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.button}>
-              <Text style={styles.buttonText}>Get started</Text>
-              <Feather name="arrow-right" size={19} color="#FFFFFF" />
+              <Text allowFontScaling={false} style={styles.buttonText}>Get started</Text>
+              <Feather name="arrow-right" size={17} color="#FFFFFF" />
             </LinearGradient>
           </Pressable>
         </Animated.View>
@@ -490,16 +502,16 @@ const styles = StyleSheet.create({
   brand: { flexDirection: 'row', alignItems: 'center', gap: 8, position: 'absolute', left: 24, bottom: 0 },
   brandImage: { width: 98, height: 31 },
   brandText: { fontSize: 19, fontWeight: '800', color: '#FFFFFF', fontStyle: 'italic', letterSpacing: -0.3 },
-  skip: { paddingHorizontal: 15, paddingVertical: 7, borderRadius: 16, backgroundColor: 'rgba(255,255,255,0.08)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.14)' },
+  skip: { paddingHorizontal: 15, paddingVertical: 4, borderRadius: 8, backgroundColor: 'rgba(255,255,255,0.08)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.14)' },
   skipText: { fontSize: 13, fontWeight: '700', color: '#CBD5E1' },
 
-  textBlock: { position: 'absolute', top: HERO + 66, left: 0, right: 0, paddingHorizontal: 30, alignItems: 'center' },
-  title: { fontSize: 30, lineHeight: 38, fontWeight: '800', color: '#F8FAFC', textAlign: 'center', letterSpacing: -0.6 },
-  subtitle: { marginTop: 14, fontSize: 15, lineHeight: 23, color: '#94A3B8', textAlign: 'center' },
+  textBlock: { position: 'absolute', top: TEXT_TOP, left: 0, right: 0, paddingHorizontal: 30, alignItems: 'center' },
+  title: { fontSize: Math.round(30 * TYPE), lineHeight: Math.round(38 * TYPE), maxWidth: 560, fontWeight: '800', color: '#F8FAFC', textAlign: 'center', letterSpacing: -0.6 },
+  subtitle: { marginTop: 14, fontSize: Math.round(15 * TYPE), lineHeight: Math.round(23 * TYPE), maxWidth: 460, color: '#94A3B8', textAlign: 'center' },
 
-  controls: { position: 'absolute', left: 0, right: 0, bottom: 0, paddingHorizontal: 24, paddingBottom: 72, alignItems: 'center' },
+  controls: { position: 'absolute', left: 0, right: 0, bottom: 0, paddingHorizontal: 24, paddingBottom: BOTTOM_GAP, alignItems: 'center' },
   dots: { flexDirection: 'row', alignItems: 'center', gap: 4, marginBottom: 6 },
-  button: { height: 56, borderRadius: 18, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, elevation: 5, shadowColor: '#1E40AF', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.22, shadowRadius: 14 },
-  buttonText: { fontSize: 16, fontWeight: '800', color: '#FFFFFF', letterSpacing: 0.3 },
+  button: { height: 46, borderRadius: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, elevation: 5, shadowColor: '#1E40AF', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.22, shadowRadius: 14 },
+  buttonText: { fontSize: 15, fontWeight: '800', color: '#FFFFFF', letterSpacing: 0.3 },
   dot: { width: 26, height: 6, borderRadius: 3, backgroundColor: '#3B82F6' },
 });

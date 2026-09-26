@@ -8,6 +8,7 @@ import {
   StatusBar,
   Image,
   ImageBackground,
+  ScrollView,
   useWindowDimensions
 } from '../../../theme/native';
 import { LinearGradient } from '../../../theme/linear-gradient';
@@ -23,8 +24,10 @@ import {
 
 export default function AuroraHomeScreen() {
   const router = useRouter();
-  const { height } = useWindowDimensions();
+  const { height, width } = useWindowDimensions();
   const isCompactScreen = height < 760;
+  const isNarrow = width < 350; // small phones: the two cards stack and the search pill keeps only its icon
+  const orb = Math.round(Math.max(96, Math.min(170, height * 0.2, width * 0.42)));
 
   // The signed-in user's own picture, shown in the header.
   const [profileImage, setProfileImage] = useState<string | null>(null);
@@ -76,10 +79,14 @@ export default function AuroraHomeScreen() {
           </TouchableOpacity>
         </View>
 
-        <View
-          style={[
+        {/* The page scrolls, so nothing is ever cut off on a short screen. On a tablet it stays a comfortable width. */}
+        <ScrollView
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+          contentContainerStyle={[
             styles.scrollContent,
             isCompactScreen && styles.compactScrollContent,
+            styles.contentWidth,
           ]}
         >
           {/* Glowing Orb Hero Visual */}
@@ -87,6 +94,7 @@ export default function AuroraHomeScreen() {
             style={[
               styles.orbContainer,
               isCompactScreen && styles.compactOrbContainer,
+              { height: Math.round(orb * 1.2) },
             ]}
           >
             {/* Outer Glow Ring */}
@@ -99,6 +107,7 @@ export default function AuroraHomeScreen() {
               style={[
                 styles.orbSphere,
                 isCompactScreen && styles.compactOrbSphere,
+                { width: orb, height: orb, borderRadius: orb / 2 },
               ]}
             >
               {/* Inner Wave Pattern Accents */}
@@ -142,9 +151,9 @@ export default function AuroraHomeScreen() {
           </TouchableOpacity>
 
           {/* Grid Cards Row */}
-          <View style={styles.gridRow}>
+          <View style={[styles.gridRow, isNarrow && { flexDirection: 'column' }]}>
             {/* Grid Card 1 */}
-            <TouchableOpacity activeOpacity={0.9} style={styles.gridCard}>
+            <TouchableOpacity activeOpacity={0.9} style={[styles.gridCard, isNarrow && { marginBottom: 2 }]}>
               <View style={styles.gridCardContent}>
                 <View style={styles.gridCardTitleRow}>
                   <View style={styles.gridCardText}>
@@ -161,7 +170,7 @@ export default function AuroraHomeScreen() {
             </TouchableOpacity>
 
             {/* Grid Card 2 */}
-            <TouchableOpacity activeOpacity={0.9} style={styles.gridCard}>
+            <TouchableOpacity activeOpacity={0.9} style={[styles.gridCard, isNarrow && { marginBottom: 2 }]}>
               <View style={styles.gridCardContent}>
                 <View style={styles.gridCardTitleRow}>
                   <View style={styles.gridCardText}>
@@ -191,9 +200,9 @@ export default function AuroraHomeScreen() {
                 <Feather name="plus" size={20} color="#94A3B8" />
               </TouchableOpacity>
 
-              <TouchableOpacity style={styles.webSearchPill} activeOpacity={0.8}>
-                <Ionicons name="globe-outline" size={18} color="#94A3B8" style={{ marginRight: 6 }} />
-                <Text style={styles.webSearchText}>Web Search</Text>
+              <TouchableOpacity style={[styles.webSearchPill, isNarrow && { paddingHorizontal: 12 }]} activeOpacity={0.8}>
+                <Ionicons name="globe-outline" size={18} color="#94A3B8" style={{ marginRight: isNarrow ? 0 : 6 }} />
+                {!isNarrow && <Text style={styles.webSearchText}>Web Search</Text>}
               </TouchableOpacity>
 
               <View style={{ flex: 1 }} />
@@ -212,7 +221,7 @@ export default function AuroraHomeScreen() {
               </TouchableOpacity>
             </View>
           </View>
-        </View>
+        </ScrollView>
       </SafeAreaView>
     </View>
   );
@@ -281,6 +290,11 @@ const styles = StyleSheet.create({
     paddingTop: 5,
     // Keep the last content clear of the fixed tab bar.
     paddingBottom: 100,
+  },
+  contentWidth: {
+    width: '100%',
+    maxWidth: 640,
+    alignSelf: 'center',
   },
   compactScrollContent: {
     paddingTop: 4,
@@ -438,7 +452,7 @@ const styles = StyleSheet.create({
   bottomTray: {
     backgroundColor: '#0F151D',
     borderRadius: 20,
-    height: 130,
+    minHeight: 130,
     paddingHorizontal: 20,
     paddingTop: 20,
     marginTop: 20,

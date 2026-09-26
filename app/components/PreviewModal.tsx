@@ -45,7 +45,10 @@ type PreviewModalProps = {
 function normalizeUrl(url?: string | null): string | null {
 	const value = String(url ?? '').trim();
 	if (!value || value.toLowerCase() === 'null' || value.toLowerCase() === 'undefined') return null;
-	if (/^https?:\/\//i.test(value)) return value;
+	// Android 9 and newer refuse plain http pages inside the app (ERR_CLEARTEXT_NOT_PERMITTED), while older
+	// phones allow them - so the same demo link worked on some phones and not others. Ask for https instead.
+	if (/^http:\/\//i.test(value)) return /^http:\/\/(localhost|127\.|10\.|192\.168\.)/i.test(value) ? value : value.replace(/^http:/i, 'https:');
+	if (/^https:\/\//i.test(value)) return value;
 	if (value.startsWith('//')) return `https:${value}`;
 	if (value.startsWith('/')) return getApiAssetUrl(value);
 
@@ -182,7 +185,9 @@ export default function PreviewModal({ visible, productId, url, title, subtitle,
 				setError(
 					/NAME_NOT_RESOLVED|CANNOT_FIND_HOST|ADDRESS_UNREACHABLE/i.test(description)
 						? `${hostOf(target)} could not be reached. The demo link saved on this product may be wrong, or the site is offline.`
-						: description || 'This page could not be loaded here.',
+						: /CLEARTEXT|SSL|CERT|ERR_CONNECTION_(REFUSED|RESET|CLOSED)|TIMED_OUT/i.test(description)
+							? `${hostOf(target)} does not allow a secure preview inside the app. Tap "Open in browser" to see it.`
+							: 'This page could not be loaded here. Tap "Open in browser" to see it.',
 				);
 			}}
 			onHttpError={({ nativeEvent }) => {
